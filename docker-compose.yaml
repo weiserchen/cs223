@@ -1,0 +1,58 @@
+services:
+  # Users database
+  postgres-users:
+    image: postgres:17.1
+    ports:
+      - 15432:5432
+    volumes:
+      - ./volume/postgres/users:/data/postgres
+      - ./pkg/schema/users.sql:/docker-entrypoint-initdb.d/users.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d calendar -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=calendar
+      - PGDATA=/data/postgres
+  # Events database
+  # postgres-events:
+  #   image: postgres:17.1
+  #   ports:
+  #     - 15433:5432
+  #   volumes:
+  #     - ./volume/postgres/events:/data/postgres
+  #     - ./pkg/schema/events.sql:/docker-entrypoint-initdb.d/events.sql
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -d calendar -U postgres"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #   environment:
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_DB=calendar
+  #     - PGDATA=/data/postgres
+  # EventLogs database
+  # postgres-event-logs:
+  #   image: postgres:17.1
+  #   ports:
+  #     - 15434:5432
+  #   volumes:
+  #     - ./volume/postgres/event_logs:/data/postgres
+  #     - ./pkg/schema/event_logs.sql:/docker-entrypoint-initdb.d/event_logs.sql
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -d calendar -U postgres"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #   environment:
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_DB=calendar
+  #     - PGDATA=/data/postgres

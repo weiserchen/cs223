@@ -1,0 +1,12 @@
+
+CREATE TABLE IF NOT EXISTS Events (
+  event_id BIGINT GENERATED ALWAYS AS IDENTITY,
+  event_name VARCHAR(100) NOT NULL,
+  event_info VARCHAR(4000) NOT NULL,
+  start_at TIMESTAMPTZ NOT NULL,
+  end_at TIMESTAMPTZ NOT NULL,
+  location VARCHAR(100) NOT NULL,
+  participants BIGINT[] NOT NULL,
+  host BIGINT,
+  PRIMARY KEY (event_id)
+);
