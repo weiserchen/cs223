@@ -3,8 +3,10 @@ package v1
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"txchain/pkg/format"
@@ -20,7 +22,7 @@ func Request[In, Out any](client *http.Client, method, addr, path string, code i
 	var values url.Values
 
 	if method == http.MethodGet {
-		values, err = format.EncodeParam[In](*params)
+		values, err = format.EncodeParam(*params)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrInvalidRequestParam, err)
 		}
@@ -32,7 +34,7 @@ func Request[In, Out any](client *http.Client, method, addr, path string, code i
 		body = bytes.NewReader(b)
 	}
 
-	endpoint = fmt.Sprintf("http://%s%s", addr, path)
+	endpoint = fmt.Sprintf("%s%s", addr, path)
 	req, err = http.NewRequest(method, endpoint, body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidRequestParam, err)
@@ -42,6 +44,8 @@ func Request[In, Out any](client *http.Client, method, addr, path string, code i
 		req.URL.RawQuery = values.Encode()
 	}
 
+	log.Println("Request:", req.Method, req.URL.String())
+
 	res, err = client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrBadRequest, err)
@@ -49,13 +53,18 @@ func Request[In, Out any](client *http.Client, method, addr, path string, code i
 	defer res.Body.Close()
 
 	if res.StatusCode != code {
-		return nil, fmt.Errorf("%w: %v", ErrBadResponseCode, res.StatusCode)
+		var errResp format.ErrorResponse
+		if err = json.NewDecoder(res.Body).Decode(&errResp); err != nil {
+			return nil, fmt.Errorf("%w: %v. error msg: %v", ErrBadResponseCode, res.StatusCode, err)
+		}
+		return nil, fmt.Errorf("%w: %v. error msg: %v", ErrBadResponseCode, res.StatusCode, errResp)
 	}
 
 	var resp Out
-	if err = json.NewDecoder(res.Body).Decode(&resp); err != nil {
+	if err = json.NewDecoder(res.Body).Decode(&resp); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidResponseBody, err)
 	}
+
 	return &resp, nil
 }
 
@@ -68,7 +77,7 @@ func PutRequest[In, Out any](client *http.Client, addr, path string, code int, p
 }
 
 func PostRequest[In, Out any](client *http.Client, addr, path string, code int, params *In) (*Out, error) {
-	return Request[In, Out](client, http.MethodPut, addr, path, code, params)
+	return Request[In, Out](client, http.MethodPost, addr, path, code, params)
 }
 
 func DeleteRequest[In, Out any](client *http.Client, addr, path string, code int, params *In) (*Out, error) {
@@ -77,6 +86,30 @@ func DeleteRequest[In, Out any](client *http.Client, addr, path string, code int
 
 func GetRequestGetUser(client *http.Client, addr string, params *RequestGetUser) (*ResponseGetUser, error) {
 	return GetRequest[RequestGetUser, ResponseGetUser](client, addr, PathGetUser, http.StatusOK, params)
+}
+
+func GetRequestGetUserID(client *http.Client, addr string, params *RequestGetUserID) (*ResponseGetUserID, error) {
+	return GetRequest[RequestGetUserID, ResponseGetUserID](client, addr, PathGetUserID, http.StatusOK, params)
+}
+
+func GetRequestGetUserName(client *http.Client, addr string, params *RequestGetUserName) (*ResponseGetUserName, error) {
+	return GetRequest[RequestGetUserName, ResponseGetUserName](client, addr, PathGetUserName, http.StatusOK, params)
+}
+
+func GetRequestGetUserHostEvents(client *http.Client, addr string, params *RequestGetUserHostEvents) (*ResponseGetUserHostEvents, error) {
+	return GetRequest[RequestGetUserHostEvents, ResponseGetUserHostEvents](client, addr, PathGetUserHostEvents, http.StatusOK, params)
+}
+
+func PostRequestCreateUser(client *http.Client, addr string, params *RequestCreateUser) (*ResponseCreateUser, error) {
+	return PostRequest[RequestCreateUser, ResponseCreateUser](client, addr, PathCreateUser, http.StatusCreated, params)
+}
+
+func DeleteRequestDeleteUser(client *http.Client, addr string, params *RequestDeleteUser) (*ResponseDeleteUser, error) {
+	return DeleteRequest[RequestDeleteUser, ResponseDeleteUser](client, addr, PathDeleteUser, http.StatusNoContent, params)
+}
+
+func PutRequestUpdateUserName(client *http.Client, addr string, params *RequestUpdateUserName) (*ResponseUpdateUserName, error) {
+	return PutRequest[RequestUpdateUserName, ResponseUpdateUserName](client, addr, PathUpdateUserName, http.StatusNoContent, params)
 }
 
 func PutRequestAddUserHostEvent(client *http.Client, addr string, params *RequestAddUserHostEvent) (*ResponseAddUserHostEvent, error) {
@@ -109,6 +142,10 @@ func PutRequestAddEventParticipant(client *http.Client, addr string, params *Req
 
 func PutRequestRemoveEventParticipant(client *http.Client, addr string, params *RequestRemoveEventParticipant) (*ResponseRemoveEventParticipant, error) {
 	return PutRequest[RequestRemoveEventParticipant, ResponseRemoveEventParticipant](client, addr, PathRemoveEventParticipant, http.StatusNoContent, params)
+}
+
+func GetRequestGetEventLogs(client *http.Client, addr string, params *RequestGetEventLogs) (*ResponseGetEventLogs, error) {
+	return GetRequest[RequestGetEventLogs, ResponseGetEventLogs](client, addr, PathGetEventLogs, http.StatusCreated, params)
 }
 
 func PostRequestCreateEventLog(client *http.Client, addr string, params *RequestCreateEventLog) (*ResponseCreateEventLog, error) {

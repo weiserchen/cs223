@@ -52,7 +52,7 @@ func (table *TableUser) GetUser(ctx context.Context, userID int64) (*User, error
 		ctx,
 		query,
 		userID,
-	).Scan(&user.Name, user.HostEvents); err != nil {
+	).Scan(&user.Name, &user.HostEvents); err != nil {
 		return nil, err
 	}
 

@@ -8,9 +8,9 @@ stop() {
 }
 
 build() {
-    ${DOCKER} build -f ./service/user/Dockerfile .
-    # ${DOCKER} build -f ./service/event/Dockerfile .
-    # ${DOCKER} build -f ./service/event_log/Dockerfile .
+    ${DOCKER} build --platform "${OS}/${ARCH}" -t "user-service:latest" -f ./service/user/Dockerfile .
+    ${DOCKER} build --platform "${OS}/${ARCH}" -t "event-service:latest" -f ./service/event/Dockerfile .
+    ${DOCKER} build --platform "${OS}/${ARCH}" -t "event-log-service:latest" -f ./service/event_log/Dockerfile .
 }
 
 cmd=$1
@@ -23,6 +23,9 @@ else
     echo "unsupported container runtime"
     exit 1
 fi
+
+ARCH=$(uname -m)
+OS=linux
 
 if [[ "${cmd}" == "run" ]]; then 
     trap stop exit

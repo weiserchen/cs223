@@ -8,8 +8,8 @@ COPY ./pkg/ /src/pkg/
 
 ARG TARGETARCH
 ARG TARGETOS
-RUN echo "Building User Service image for ${TARGETOS}/${TARGETARCH}..."
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /bin/service ./service/user/
+RUN echo "Building Event Service image for ${TARGETOS}/${TARGETARCH}..."
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /bin/service ./service/event/
 
 FROM scratch
 COPY --from=build /bin/service /bin/service

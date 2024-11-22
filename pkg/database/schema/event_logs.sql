@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS EventLogs (
   event_id BIGINT,
   user_id BIGINT,
   event_type VARCHAR(20) NOT NULL,
-  update JSONB NOT NULL,
+  update VARCHAR(200) NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (log_id)
 );

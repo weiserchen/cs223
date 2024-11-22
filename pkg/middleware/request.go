@@ -22,12 +22,6 @@ func Chain(handler http.Handler, middlewares ...Middlerware) http.Handler {
 	return handler
 }
 
-func Noop(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-	})
-}
-
 func ValidateBody[T any](next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		v, err := format.DecodeBody[T](r)

@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,55 +10,157 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
-	tc "github.com/testcontainers/testcontainers-go"
+	tctr "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func TestRedisContainer(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
-	req := tc.ContainerRequest{
+	req := tctr.ContainerRequest{
 		Image:        "redis:latest",
 		ExposedPorts: []string{"6379/tcp"},
 		WaitingFor:   wait.ForLog("Ready to accept connections"),
 	}
-	redisC, err := tc.GenericContainer(ctx, tc.GenericContainerRequest{
+	redisC, err := tctr.GenericContainer(ctx, tctr.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
 	})
 	require.NoError(t, err)
-	tc.CleanupContainer(t, redisC)
+	tctr.CleanupContainer(t, redisC)
 }
 
 func TestPostgresContainer(t *testing.T) {
+	t.Parallel()
+
 	var err error
 	var pgc *PgContainer
-	var dummy int
-	var userScript string
-	var b []byte
+	var dummy bool
 
-	pgc, err = NewPostgresContainer(
-		"17.1",
-	)
-	require.NoError(t, err)
-
-	userScript, err = filepath.Abs("../schema/users.sql")
+	pgc, err = NewPostgresContainer(t, "17.1")
+	defer tctr.CleanupContainer(t, pgc.Container)
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, pgc.Endpoint())
+	conn, err := pgxpool.New(ctx, pgc.Endpoint())
 	require.NoError(t, err)
 
-	b, err = os.ReadFile(userScript)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(b))
-	require.NoError(t, err)
-
-	usersTableExistsQuery := `
-		SELECT COUNT(*) FROM Users;
+	testQuery := `
+		SELECT true;
 	`
-	err = pool.QueryRow(ctx, usersTableExistsQuery).Scan(&dummy)
+	err = conn.QueryRow(ctx, testQuery).Scan(&dummy)
 	require.NoError(t, err)
-	require.Zero(t, dummy)
+	require.True(t, dummy)
 
-	tc.CleanupContainer(t, pgc.Container)
+}
+
+func TestLocalSchemaCreation(t *testing.T) {
+	t.Parallel()
+
+	var err error
+	var pgc *PgContainer
+
+	testcases := []struct {
+		name   string
+		table  string
+		script string
+	}{
+		{
+			name:   "Users Table",
+			table:  "Users",
+			script: "./schema/users.sql",
+		},
+		{
+			name:   "Events Table",
+			table:  "Events",
+			script: "./schema/events.sql",
+		},
+		{
+			name:   "EventLogs Table",
+			table:  "EventLogs",
+			script: "./schema/event_logs.sql",
+		},
+	}
+
+	pgc, err = NewPostgresContainer(t, "17.1")
+	defer tctr.CleanupContainer(t, pgc.Container)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	conn, err := pgxpool.New(ctx, pgc.Endpoint())
+	require.NoError(t, err)
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var scriptPath string
+			var err error
+			var dummy int
+			var b []byte
+
+			scriptPath, err = filepath.Abs(tc.script)
+			require.NoError(t, err)
+
+			b, err = os.ReadFile(scriptPath)
+			require.NoError(t, err)
+
+			_, err = conn.Exec(ctx, string(b))
+			require.NoError(t, err)
+
+			tableExistsQuery := fmt.Sprintf(
+				`SELECT COUNT(*) FROM %s;`,
+				tc.table,
+			)
+
+			err = conn.QueryRow(ctx, tableExistsQuery).Scan(&dummy)
+			require.NoError(t, err)
+			require.Zero(t, dummy)
+		})
+	}
+}
+
+func TestDistributedSchemaCreation(t *testing.T) {
+	t.Parallel()
+
+	testcases := []struct {
+		name   string
+		table  string
+		script string
+	}{
+		{
+			name:   "Users Table",
+			table:  "Users",
+			script: "schema/users.sql",
+		},
+		{
+			name:   "Events Table",
+			table:  "Events",
+			script: "schema/events.sql",
+		},
+		{
+			name:   "EventLogs Table",
+			table:  "EventLogs",
+			script: "schema/event_logs.sql",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var err error
+			var pgc *PgContainer
+
+			pgc, err = NewContainerTable(t, "17.1", tc.table, tc.script)
+			defer func() {
+				if pgc != nil {
+					tctr.CleanupContainer(t, pgc.Container)
+				}
+			}()
+
+			require.NoError(t, err)
+		})
+	}
 }

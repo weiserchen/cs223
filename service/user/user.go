@@ -11,25 +11,10 @@ import (
 )
 
 func main() {
-	env := map[string]string{
-		router.ConfigServerHost:          "localhost",
-		router.ConfigServerPort:          "8100",
-		router.ConfigTableUser:           "true",
-		router.ConfigServiceUserAddr:     "localhost:8100",
-		router.ConfigServiceEventAddr:    "localhost:8200",
-		router.ConfigServiceEventLogAddr: "localhost:8300",
-	}
-	cfg := router.NewConfig(
-		context.Background(),
-		os.Stdin,
-		os.Stdout,
-		os.Stderr,
-		router.CustomEnv(env, os.Getenv),
-		os.Args,
-	)
-
+	env := getDefaultEnv()
+	cfg := getDefaultConfig(env)
 	r := router.New(cfg)
-	routes := getUserRoutes(cfg)
+	routes := getRoutes(cfg)
 	for _, route := range routes {
 		r.AddRoute(route)
 	}
@@ -40,13 +25,36 @@ func main() {
 	}
 }
 
-func getUserRoutes(cfg *router.Config) []router.Route {
+func getDefaultEnv() map[string]string {
+	return map[string]string{
+		router.ConfigServerHost:          "localhost",
+		router.ConfigServerPort:          "8100",
+		router.ConfigTableUser:           "true",
+		router.ConfigServiceUserAddr:     "localhost:8100",
+		router.ConfigServiceEventAddr:    "localhost:8200",
+		router.ConfigServiceEventLogAddr: "localhost:8300",
+	}
+}
+
+func getDefaultConfig(env map[string]string) *router.Config {
+	cfg := router.NewConfig(
+		context.Background(),
+		os.Stdin,
+		os.Stdout,
+		os.Stderr,
+		router.CustomEnv(env, os.Getenv),
+		os.Args,
+	)
+	return cfg
+}
+
+func getRoutes(cfg *router.Config) []router.Route {
 	return []router.Route{
 		{
 			Verb:        http.MethodGet,
 			Path:        apiV1.PathGetUser,
 			Handler:     apiV1.HandleGetUser(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateQuery[apiV1.RequestCreateUser]},
+			Middlewares: []middleware.Middlerware{middleware.ValidateQuery[apiV1.RequestGetUser]},
 		},
 		{
 			Verb:        http.MethodGet,

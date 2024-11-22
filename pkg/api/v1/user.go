@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"fmt"
 	"net/http"
 	"txchain/pkg/database"
 	"txchain/pkg/format"
@@ -27,7 +26,7 @@ func HandleGetUser(cfg *router.Config) http.Handler {
 		req := middleware.MarshalQuery[RequestGetUser](r)
 		user, err = cfg.DB.UserStore.GetUser(cfg.Ctx, req.UserID)
 		if err != nil {
-			format.WriteJsonResponse(w, fmt.Errorf("%w: %v", ErrGetUser, err).Error(), http.StatusInternalServerError)
+			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetUser, err), http.StatusInternalServerError)
 			return
 		}
 

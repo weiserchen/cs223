@@ -39,5 +39,5 @@ var (
 	ErrInvalidRequestParam = errors.New("invalid request param")
 	ErrBadRequest          = errors.New("bad request")
 	ErrBadResponseCode     = errors.New("bad response code")
-	ErrInvalidResponseBody = errors.New("invalid resposne body")
+	ErrInvalidResponseBody = errors.New("invalid response body")
 )

@@ -2,17 +2,22 @@ package database
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
+	"os"
+	"testing"
 	"time"
 
 	"github.com/docker/go-connections/nat"
-	tc "github.com/testcontainers/testcontainers-go"
+	"github.com/jackc/pgx/v5/pgxpool"
+	tctr "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 type PgContainer struct {
-	Container   tc.Container
+	Container   tctr.Container
 	Host        string
 	Port        nat.Port
 	ExposedPort nat.Port
@@ -30,8 +35,7 @@ func (pgc *PgContainer) Endpoint() string {
 }
 
 type PgContainerOption struct {
-	Runtime     Runtime
-	InitScripts []string
+	Runtime Runtime
 }
 
 type Runtime string
@@ -48,28 +52,41 @@ var (
 	testDBData     = "/data/postgres"
 )
 
-func NewPostgresContainer(version string, options ...PgContainerOption) (*PgContainer, error) {
+type TableOption struct {
+	FS fs.FS
+}
+
+var (
+	//go:embed schema/*.sql
+	schema embed.FS
+)
+
+func NewPostgresContainer(
+	t *testing.T,
+	version string,
+	options ...PgContainerOption,
+) (pgc *PgContainer, err error) {
 	var option PgContainerOption
 	if len(options) > 0 {
 		option = options[0]
 	}
 
-	var provider tc.ProviderType
+	var provider tctr.ProviderType
 	switch option.Runtime {
 	case RuntimeDocker:
-		provider = tc.ProviderDocker
+		provider = tctr.ProviderDocker
 	case RuntimePodman:
-		provider = tc.ProviderPodman
+		provider = tctr.ProviderPodman
 	default:
-		provider = tc.ProviderDefault
+		provider = tctr.ProviderDefault
 	}
 
 	ctx := context.Background()
 	pgPort := "5432/tcp"
 
-	req := tc.GenericContainerRequest{
+	req := tctr.GenericContainerRequest{
 		ProviderType: provider,
-		ContainerRequest: tc.ContainerRequest{
+		ContainerRequest: tctr.ContainerRequest{
 			Image:        fmt.Sprintf("postgres:%s", version),
 			ExposedPorts: []string{pgPort},
 			Env: map[string]string{
@@ -97,10 +114,15 @@ func NewPostgresContainer(version string, options ...PgContainerOption) (*PgCont
 		Started: true,
 	}
 
-	container, err := tc.GenericContainer(ctx, req)
+	container, err := tctr.GenericContainer(ctx, req)
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err != nil {
+			tctr.CleanupContainer(t, container)
+		}
+	}()
 
 	port, err := container.MappedPort(ctx, nat.Port(pgPort))
 	if err != nil {
@@ -112,7 +134,7 @@ func NewPostgresContainer(version string, options ...PgContainerOption) (*PgCont
 		return nil, err
 	}
 
-	pgc := &PgContainer{
+	pgc = &PgContainer{
 		Container:   container,
 		Host:        host,
 		Port:        port,
@@ -120,4 +142,99 @@ func NewPostgresContainer(version string, options ...PgContainerOption) (*PgCont
 	}
 
 	return pgc, nil
+}
+
+func NewContainerTable(
+	t *testing.T,
+	version, table, script string,
+	options ...TableOption,
+) (pgc *PgContainer, err error) {
+	var option TableOption
+	var b []byte
+	var filesystem fs.FS
+
+	if len(options) > 0 {
+		option = options[0]
+	}
+	if option.FS != nil {
+		filesystem = option.FS
+	} else {
+		filesystem = os.DirFS("./")
+	}
+
+	pgc, err = NewPostgresContainer(t, version)
+	defer func() {
+		if err != nil && pgc != nil {
+			tctr.CleanupContainer(t, pgc.Container)
+		}
+	}()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := context.Background()
+	conn, err := pgxpool.New(ctx, pgc.Endpoint())
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		conn.Close()
+	}()
+
+	b, err = fs.ReadFile(filesystem, script)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = conn.Exec(ctx, string(b))
+	if err != nil {
+		return nil, err
+	}
+
+	tableExistsQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s;`, table)
+
+	var dummy int
+	err = conn.QueryRow(ctx, tableExistsQuery).Scan(&dummy)
+	if err != nil || dummy != 0 {
+		tctr.CleanupContainer(t, pgc.Container)
+		return nil, err
+	}
+
+	return pgc, nil
+}
+
+func NewContainerTableUsers(t *testing.T, version string) (*PgContainer, error) {
+	return NewContainerTable(
+		t,
+		version,
+		"Users",
+		"schema/users.sql",
+		TableOption{
+			FS: &schema,
+		},
+	)
+}
+
+func NewContainerTableEvents(t *testing.T, version string) (*PgContainer, error) {
+	return NewContainerTable(
+		t,
+		version,
+		"Events",
+		"schema/events.sql",
+		TableOption{
+			FS: &schema,
+		},
+	)
+}
+
+func NewContainerTableEventLogs(t *testing.T, version string) (*PgContainer, error) {
+	return NewContainerTable(
+		t,
+		version,
+		"EventLogs",
+		"schema/event_logs.sql",
+		TableOption{
+			FS: &schema,
+		},
+	)
 }
