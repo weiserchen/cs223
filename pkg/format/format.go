@@ -16,6 +16,7 @@ var (
 )
 
 var (
+	ErrJsonEncode   = errors.New("failed to encode json")
 	ErrJsonDecode   = errors.New("failed to decode json")
 	ErrSchemaDecode = errors.New("failed to decode schema")
 )

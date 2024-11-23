@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -21,6 +22,8 @@ func defaultClient() *http.Client {
 	}
 }
 func TestUserAPI(t *testing.T) {
+	t.Parallel()
+
 	pgc, err := database.NewContainerTableUsers(t, "17.1")
 	defer func() {
 		if pgc != nil {
@@ -33,7 +36,7 @@ func TestUserAPI(t *testing.T) {
 	env[router.ConfigDatabaseURL] = pgc.Endpoint()
 	cfg := getDefaultConfig(env)
 	r := router.New(cfg)
-	routes := getRoutes(cfg)
+	routes := apiV1.NewUserRoutes(cfg)
 	for _, route := range routes {
 		r.AddRoute(route)
 	}
@@ -42,65 +45,96 @@ func TestUserAPI(t *testing.T) {
 	client := defaultClient()
 	server := httptest.NewServer(r.Routes())
 
-	userNameAlice := "alice"
-	hostEventsAlice := []int64{1, 2, 3}
+	log.Println(server.URL)
+
+	user := struct {
+		ID         int64
+		Name       string
+		HostEvents []int64
+	}{
+		Name:       "Alice",
+		HostEvents: []int64{1, 2, 3},
+	}
+
+	// Create user
 	reqCreateUser := &apiV1.RequestCreateUser{
-		UserName:   userNameAlice,
-		HostEvents: hostEventsAlice,
+		UserName:   user.Name,
+		HostEvents: user.HostEvents,
 	}
 	respCreateUser, err := apiV1.PostRequestCreateUser(client, server.URL, reqCreateUser)
 	require.NoError(t, err)
+	user.ID = respCreateUser.UserID
 
+	// Get user
 	reqGetUser := &apiV1.RequestGetUser{
-		UserID: respCreateUser.UserID,
+		UserID: user.ID,
 	}
 	respGetUser, err := apiV1.GetRequestGetUser(client, server.URL, reqGetUser)
 	require.NoError(t, err)
-	require.Equal(t, respCreateUser.UserID, respGetUser.UserID)
-	require.Equal(t, reqCreateUser.UserName, respGetUser.UserName)
-	require.Equal(t, reqCreateUser.HostEvents, respGetUser.HostEvents)
+	require.Equal(t, user.ID, respGetUser.UserID)
+	require.Equal(t, user.Name, respGetUser.UserName)
+	require.Equal(t, user.HostEvents, respGetUser.HostEvents)
 
+	// Get user id
 	reqGetUserID := &apiV1.RequestGetUserID{
-		UserName: reqCreateUser.UserName,
+		UserName: user.Name,
 	}
 	respGetUserID, err := apiV1.GetRequestGetUserID(client, server.URL, reqGetUserID)
 	require.NoError(t, err)
-	require.Equal(t, respCreateUser.UserID, respGetUserID.UserID)
+	require.Equal(t, user.ID, respGetUserID.UserID)
 
+	// Get user name
 	reqGetUserName := &apiV1.RequestGetUserName{
-		UserID: respCreateUser.UserID,
+		UserID: user.ID,
 	}
 	respGetUserName, err := apiV1.GetRequestGetUserName(client, server.URL, reqGetUserName)
 	require.NoError(t, err)
-	require.Equal(t, reqCreateUser.UserName, respGetUserName.UserName)
+	require.Equal(t, user.Name, respGetUserName.UserName)
 
+	// Get user host event
 	reqGetUserHostEvents := &apiV1.RequestGetUserHostEvents{
-		UserID: respCreateUser.UserID,
+		UserID: user.ID,
 	}
 	respGetUserHostEvents, err := apiV1.GetRequestGetUserHostEvents(client, server.URL, reqGetUserHostEvents)
 	require.NoError(t, err)
-	require.Equal(t, reqCreateUser.HostEvents, respGetUserHostEvents.HostEvents)
+	require.Equal(t, user.HostEvents, respGetUserHostEvents.HostEvents)
 
+	// Update user name
+	user.Name = "Bob"
+	reqUpdateUserName := &apiV1.RequestUpdateUserName{
+		UserID:   user.ID,
+		UserName: user.Name,
+	}
+	_, err = apiV1.PutRequestUpdateUserName(client, server.URL, reqUpdateUserName)
+	require.NoError(t, err)
+
+	respGetUserName, err = apiV1.GetRequestGetUserName(client, server.URL, reqGetUserName)
+	require.NoError(t, err)
+	require.Equal(t, user.Name, respGetUserName.UserName)
+
+	// Add user host event
 	reqAddUserHostEvent := &apiV1.RequestAddUserHostEvent{
-		UserID:  respCreateUser.UserID,
+		UserID:  user.ID,
 		EventID: 4,
 	}
 	_, err = apiV1.PutRequestAddUserHostEvent(client, server.URL, reqAddUserHostEvent)
 	require.NoError(t, err)
 
+	// Remove user host event
 	reqRemoveUserHostEvent := &apiV1.RequestRemoveUserHostEvent{
-		UserID:  respCreateUser.UserID,
+		UserID:  user.ID,
 		EventID: 2,
 	}
 	_, err = apiV1.PutRequestRemoveUserHostEvent(client, server.URL, reqRemoveUserHostEvent)
 	require.NoError(t, err)
 
+	// Get user host events
 	respGetUserHostEvents, err = apiV1.GetRequestGetUserHostEvents(client, server.URL, reqGetUserHostEvents)
 	require.NoError(t, err)
 	newHostEvents := slices.Sorted(slices.Values(respGetUserHostEvents.HostEvents))
 	require.Equal(t, []int64{1, 3, 4}, newHostEvents)
 
-	// test duplicate add/remove
+	// Duplicate add/remove host events
 	_, err = apiV1.PutRequestAddUserHostEvent(client, server.URL, reqAddUserHostEvent)
 	require.NoError(t, err)
 
@@ -112,13 +146,14 @@ func TestUserAPI(t *testing.T) {
 	newHostEvents = slices.Sorted(slices.Values(respGetUserHostEvents.HostEvents))
 	require.Equal(t, []int64{1, 3, 4}, newHostEvents)
 
+	// Delete user
 	reqDeleteUser := &apiV1.RequestDeleteUser{
-		UserID: respCreateUser.UserID,
+		UserID: user.ID,
 	}
 	_, err = apiV1.DeleteRequestDeleteUser(client, server.URL, reqDeleteUser)
 	require.NoError(t, err)
 
-	// test user not exists
+	// Get non-exist user
 	_, err = apiV1.GetRequestGetUser(client, server.URL, reqGetUser)
 	require.Error(t, err)
 }

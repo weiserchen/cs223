@@ -7,6 +7,6 @@ CREATE TABLE IF NOT EXISTS Events (
   end_at TIMESTAMPTZ NOT NULL,
   location VARCHAR(100) NOT NULL,
   participants BIGINT[] NOT NULL,
-  host BIGINT,
+  host_id BIGINT,
   PRIMARY KEY (event_id)
 );

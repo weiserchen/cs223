@@ -44,7 +44,7 @@ func Request[In, Out any](client *http.Client, method, addr, path string, code i
 		req.URL.RawQuery = values.Encode()
 	}
 
-	log.Println("Request:", req.Method, req.URL.String())
+	log.Printf("Request: %s %s. body: %s", req.Method, req.URL.String(), string(b))
 
 	res, err = client.Do(req)
 	if err != nil {
@@ -53,11 +53,14 @@ func Request[In, Out any](client *http.Client, method, addr, path string, code i
 	defer res.Body.Close()
 
 	if res.StatusCode != code {
+		if res.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: %d", ErrBadResponseCode, res.StatusCode)
+		}
 		var errResp format.ErrorResponse
 		if err = json.NewDecoder(res.Body).Decode(&errResp); err != nil {
-			return nil, fmt.Errorf("%w: %v. error msg: %v", ErrBadResponseCode, res.StatusCode, err)
+			return nil, fmt.Errorf("%w: %d. error msg: %v", ErrBadResponseCode, res.StatusCode, err)
 		}
-		return nil, fmt.Errorf("%w: %v. error msg: %v", ErrBadResponseCode, res.StatusCode, errResp)
+		return nil, fmt.Errorf("%w: %d. error msg: %v", ErrBadResponseCode, res.StatusCode, errResp)
 	}
 
 	var resp Out
@@ -145,9 +148,9 @@ func PutRequestRemoveEventParticipant(client *http.Client, addr string, params *
 }
 
 func GetRequestGetEventLogs(client *http.Client, addr string, params *RequestGetEventLogs) (*ResponseGetEventLogs, error) {
-	return GetRequest[RequestGetEventLogs, ResponseGetEventLogs](client, addr, PathGetEventLogs, http.StatusCreated, params)
+	return GetRequest[RequestGetEventLogs, ResponseGetEventLogs](client, addr, PathGetEventLogs, http.StatusOK, params)
 }
 
 func PostRequestCreateEventLog(client *http.Client, addr string, params *RequestCreateEventLog) (*ResponseCreateEventLog, error) {
-	return PostRequest[RequestCreateEventLog, ResponseCreateEventLog](client, addr, PathCreateEvent, http.StatusCreated, params)
+	return PostRequest[RequestCreateEventLog, ResponseCreateEventLog](client, addr, PathCreateEventLog, http.StatusCreated, params)
 }

@@ -11,7 +11,7 @@ import (
 )
 
 type EventLogStore interface {
-	GetEventLogs(ctx context.Context, eventID int64, timestamp time.Time) ([]*EventLog, error)
+	GetEventLogs(ctx context.Context, eventID int64) ([]*EventLog, error)
 	CreateEventLog(ctx context.Context, eventID int64, userID int64, eventType EventType, event *Event) (int64, error)
 }
 
@@ -30,12 +30,12 @@ var (
 )
 
 type EventLog struct {
-	LogID     int64      `json:"log_id"`
-	EventID   int64      `json:"event_id"`
-	UserID    int64      `json:"user_id"`
-	EventType EventType  `json:"event_type"`
-	Content   string     `json:"content"`
-	UpdatedAt *time.Time `json:"updated_at"` // updated by database
+	LogID     int64     `json:"log_id"`
+	EventID   int64     `json:"event_id"`
+	UserID    int64     `json:"user_id"`
+	EventType EventType `json:"event_type"`
+	Content   string    `json:"content"`
+	UpdatedAt time.Time `json:"updated_at"` // updated by database
 }
 
 var _ EventLogStore = (*TableEventLog)(nil)
@@ -86,7 +86,6 @@ func (table *TableEventLog) CreateEventLog(
 		VALUES ($1, $2, $3, $4)
 		RETURNING log_id;
 	`
-
 	if err = table.conn.QueryRow(
 		ctx,
 		query,
@@ -104,13 +103,8 @@ func (table *TableEventLog) CreateEventLog(
 func (table *TableEventLog) GetEventLogs(
 	ctx context.Context,
 	eventID int64,
-	timestamp time.Time,
 ) (eventLogs []*EventLog, err error) {
 	var rows pgx.Rows
-
-	if timestamp.IsZero() {
-		timestamp = time.Now()
-	}
 
 	query := `
 		SELECT
@@ -120,10 +114,10 @@ func (table *TableEventLog) GetEventLogs(
 			content,
 			updated_at
 		FROM EventLogs
-		WHERE event_id = $1 AND update_at < $2;
+		WHERE event_id = $1;
 	`
 
-	rows, err = table.conn.Query(ctx, query, eventID, timestamp)
+	rows, err = table.conn.Query(ctx, query, eventID)
 	if err != nil {
 		return nil, err
 	}

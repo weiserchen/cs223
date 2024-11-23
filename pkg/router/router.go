@@ -50,6 +50,8 @@ func (r *Router) Routes() http.Handler {
 }
 
 func (r *Router) Build() (err error) {
+	r.cfg.Ctx = context.Background()
+
 	r.cfg.DBURL = r.cfg.Getenv(ConfigDatabaseURL)
 	conn, err := pgxpool.New(context.Background(), r.cfg.DBURL)
 	if err != nil {
@@ -78,14 +80,14 @@ func (r *Router) Build() (err error) {
 }
 
 func (r *Router) Run() error {
+	r.Build()
+
 	interrupts := []os.Signal{
 		os.Interrupt,
 	}
 	ctx, cancel := signal.NotifyContext(r.cfg.Ctx, interrupts...)
 	defer cancel()
 	r.cfg.Ctx = ctx
-
-	r.Build()
 
 	host, port := r.cfg.Getenv(ConfigServerHost), r.cfg.Getenv(ConfigServerPort)
 	addr := fmt.Sprintf("%s:%s", host, port)

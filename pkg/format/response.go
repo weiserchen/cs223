@@ -29,7 +29,7 @@ func WriteJsonResponse[T any](w http.ResponseWriter, msg T, code int) (int, erro
 	w.Header().Set("Content-Type", "application/json")
 	b, err := json.Marshal(msg)
 	if err != nil {
-		return 0, err
+		b, _ = json.Marshal(NewErrorResponse(ErrJsonEncode, fmt.Errorf("%v", msg)))
 	}
 	return WriteResponse(w, b, code)
 }

@@ -187,7 +187,7 @@ func HandleRemoveEventParticipant(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalBody[RequestRemoveEventParticipant](r)
-		err = cfg.DB.EventStore.AddParticipant(cfg.Ctx, req.EventID, req.ParticipantID)
+		err = cfg.DB.EventStore.RemoveParticipant(cfg.Ctx, req.EventID, req.ParticipantID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrRemoveEventParticipant, err), http.StatusInternalServerError)
 			return

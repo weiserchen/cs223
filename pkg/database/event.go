@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"log"
 	"slices"
 	"time"
 
@@ -105,6 +106,7 @@ func (table *TableEvent) CreateEvent(ctx context.Context, event *Event) (int64, 
 		event.Location,
 		event.Participants,
 	).Scan(&eventID); err != nil {
+		log.Println(err)
 		return -1, err
 	}
 
@@ -130,7 +132,7 @@ func (table *TableEvent) UpdateEvent(ctx context.Context, updateEvent *Event) (e
 			event_info,
 			start_at,
 			end_at,
-			location,
+			location
 		FROM Events
 		WHERE event_id = $1;
 	`
@@ -249,8 +251,7 @@ func (table *TableEvent) AddParticipant(ctx context.Context, eventID, participan
 
 	updateQuery := `
 		UPDATE Events
-		SET
-			participants = $2
+		SET participants = $2
 		WHERE event_id = $1;
 	`
 
@@ -298,8 +299,7 @@ func (table *TableEvent) RemoveParticipant(ctx context.Context, eventID, partici
 
 	updateQuery := `
 		UPDATE Events
-		SET
-			participants = $2
+		SET participants = $2
 		WHERE event_id = $1;
 	`
 

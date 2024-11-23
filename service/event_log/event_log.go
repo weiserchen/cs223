@@ -19,8 +19,8 @@ func main() {
 func getDefaultEnv() map[string]string {
 	return map[string]string{
 		router.ConfigServerHost:          "localhost",
-		router.ConfigServerPort:          "8100",
-		router.ConfigTableUser:           "true",
+		router.ConfigServerPort:          "8300",
+		router.ConfigTableEventLog:       "true",
 		router.ConfigDatabaseURL:         "localhost:5432", // TODO: just a placeholder
 		router.ConfigServiceUserAddr:     "localhost:8100",
 		router.ConfigServiceEventAddr:    "localhost:8200",
@@ -44,7 +44,7 @@ func getRouter() *router.Router {
 	env := getDefaultEnv()
 	cfg := getDefaultConfig(env)
 	r := router.New(cfg)
-	routes := apiV1.NewUserRoutes(cfg)
+	routes := apiV1.NewEventLogRoutes(cfg)
 	for _, route := range routes {
 		r.AddRoute(route)
 	}

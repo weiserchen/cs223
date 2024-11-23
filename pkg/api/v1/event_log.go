@@ -25,7 +25,7 @@ func APIEventLogToDatabaseEventLog(apiEventLog *APIEventLog) *database.EventLog 
 		UserID:    apiEventLog.UserID,
 		EventType: database.EventType(apiEventLog.EventType),
 		Content:   apiEventLog.Content,
-		UpdatedAt: &apiEventLog.UpdatedAt,
+		// UpdatedAt: &apiEventLog.UpdatedAt,
 	}
 }
 
@@ -36,7 +36,7 @@ func DatabaseEventLogToAPIEventLog(dbEventLog *database.EventLog) *APIEventLog {
 		UserID:    dbEventLog.UserID,
 		EventType: string(dbEventLog.EventType),
 		Content:   dbEventLog.Content,
-		UpdatedAt: *dbEventLog.UpdatedAt,
+		UpdatedAt: dbEventLog.UpdatedAt,
 	}
 }
 
@@ -77,8 +77,7 @@ func HandleCreateEventLog(cfg *router.Config) http.Handler {
 }
 
 type RequestGetEventLogs struct {
-	EventID   int64     `json:"event_id" schema:"event_id"`
-	Timestamp time.Time `json:"timestamp" schema:"timestamp"`
+	EventID int64 `json:"event_id" schema:"event_id"`
 }
 
 type ResponseGetEventLogs struct {
@@ -91,7 +90,7 @@ func HandleGetEventLogs(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalQuery[RequestGetEventLogs](r)
-		dbEventLogs, err = cfg.DB.EventLogStore.GetEventLogs(cfg.Ctx, req.EventID, req.Timestamp)
+		dbEventLogs, err = cfg.DB.EventLogStore.GetEventLogs(cfg.Ctx, req.EventID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetEventLogs, err), http.StatusInternalServerError)
 			return
