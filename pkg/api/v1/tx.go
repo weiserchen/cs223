@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"log"
 	"net/http"
 	"time"
 	"txchain/pkg/database"
@@ -32,9 +33,12 @@ func HandleTxCreateEvent(cfg *router.Config) http.Handler {
 		}
 
 		req := middleware.MarshalBody[RequestTxCreateEvent](r)
-		serviceUser := cfg.Peers[router.ConfigServiceUserAddr]
-		serviceEvent := cfg.Peers[router.ConfigServiceEventAddr]
-		serviceEventLog := cfg.Peers[router.ConfigServiceUserAddr]
+		serviceUser := cfg.Peers[router.ServiceUser]
+		serviceEvent := cfg.Peers[router.ServiceEvent]
+		serviceEventLog := cfg.Peers[router.ServiceEventLog]
+		log.Println(cfg.Peers)
+		log.Println(serviceUser, serviceEvent, serviceEventLog)
+		log.Println(cfg.Getenv(router.ConfigServiceUserAddr), cfg.Getenv(router.ConfigServiceEventAddr), cfg.Getenv(router.ConfigServiceEventLogAddr))
 
 		event := &APIEvent{
 			EventName:    req.EventName,
@@ -108,19 +112,17 @@ func HandleTxUpdateEvent(cfg *router.Config) http.Handler {
 		}
 
 		req := middleware.MarshalBody[RequestTxUpdateEvent](r)
-		// serviceUser := cfg.Peers[router.ConfigServiceUserAddr]
-		serviceEvent := cfg.Peers[router.ConfigServiceEventAddr]
-		serviceEventLog := cfg.Peers[router.ConfigServiceUserAddr]
+		serviceEvent := cfg.Peers[router.ServiceEvent]
+		serviceEventLog := cfg.Peers[router.ServiceEventLog]
 
 		event := &APIEvent{
-			EventID:      req.EventID,
-			EventName:    req.EventName,
-			EventInfo:    req.EventInfo,
-			HostID:       req.UserID,
-			StartAt:      req.StartAt,
-			EndAt:        req.EndAt,
-			Location:     req.Location,
-			Participants: []int64{},
+			EventID:   req.EventID,
+			EventName: req.EventName,
+			EventInfo: req.EventInfo,
+			HostID:    req.UserID,
+			StartAt:   req.StartAt,
+			EndAt:     req.EndAt,
+			Location:  req.Location,
 		}
 		reqUpdateEvent := &RequestUpdateEvent{
 			Event: event,
@@ -165,9 +167,9 @@ func HandleTxDeleteEvent(cfg *router.Config) http.Handler {
 		}
 
 		req := middleware.MarshalBody[RequestTxDeleteEvent](r)
-		serviceUser := cfg.Peers[router.ConfigServiceUserAddr]
-		serviceEvent := cfg.Peers[router.ConfigServiceEventAddr]
-		serviceEventLog := cfg.Peers[router.ConfigServiceUserAddr]
+		serviceUser := cfg.Peers[router.ServiceUser]
+		serviceEvent := cfg.Peers[router.ServiceEvent]
+		serviceEventLog := cfg.Peers[router.ServiceEventLog]
 
 		reqRemoveUserHostEvent := &RequestRemoveUserHostEvent{
 			UserID:  req.UserID,
@@ -233,9 +235,8 @@ func HandleTxJoinEvent(cfg *router.Config) http.Handler {
 		}
 
 		req := middleware.MarshalBody[RequestTxJoinEvent](r)
-		// serviceUser := cfg.Peers[router.ConfigServiceUserAddr]
-		serviceEvent := cfg.Peers[router.ConfigServiceEventAddr]
-		serviceEventLog := cfg.Peers[router.ConfigServiceUserAddr]
+		serviceEvent := cfg.Peers[router.ServiceEvent]
+		serviceEventLog := cfg.Peers[router.ServiceEventLog]
 
 		reqAddEventParticipant := &RequestAddEventParticipant{
 			EventID:       req.EventID,
@@ -248,7 +249,7 @@ func HandleTxJoinEvent(cfg *router.Config) http.Handler {
 		}
 
 		reqCreateEventLog := &RequestCreateEventLog{
-			UserID:    req.HostID,
+			UserID:    req.ParticipantID,
 			EventID:   req.EventID,
 			EventType: string(database.EventJoin),
 			Event:     &APIEvent{},
@@ -282,9 +283,8 @@ func HandleTxLeaveEvent(cfg *router.Config) http.Handler {
 		}
 
 		req := middleware.MarshalBody[RequestTxLeaveEvent](r)
-		// serviceUser := cfg.Peers[router.ConfigServiceUserAddr]
-		serviceEvent := cfg.Peers[router.ConfigServiceEventAddr]
-		serviceEventLog := cfg.Peers[router.ConfigServiceUserAddr]
+		serviceEvent := cfg.Peers[router.ServiceEvent]
+		serviceEventLog := cfg.Peers[router.ServiceEventLog]
 
 		reqRemoveEventParticipant := &RequestRemoveEventParticipant{
 			EventID:       req.EventID,
@@ -297,7 +297,7 @@ func HandleTxLeaveEvent(cfg *router.Config) http.Handler {
 		}
 
 		reqCreateEventLog := &RequestCreateEventLog{
-			UserID:    req.HostID,
+			UserID:    req.ParticipantID,
 			EventID:   req.EventID,
 			EventType: string(database.EventLeave),
 			Event:     &APIEvent{},

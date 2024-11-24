@@ -13,13 +13,13 @@ var (
 	ErrDatabaseConnection = errors.New("unable to connect to database")
 )
 
-var (
+const (
 	ServiceUser     = "User"
 	ServiceEvent    = "Event"
 	ServiceEventLog = "EventLog"
 )
 
-var (
+const (
 	ConfigServerHost          = "SERVER_HOST"
 	ConfigServerPort          = "SERVER_PORT"
 	ConfigTableUser           = "USER_TABLE"

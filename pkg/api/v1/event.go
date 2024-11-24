@@ -34,6 +34,9 @@ func DatabaseEventToAPIEvent(dbEvent *database.Event) *APIEvent {
 }
 
 func APIEventToDatabaseEvent(apiEvent *APIEvent) *database.Event {
+	if apiEvent == nil {
+		return nil
+	}
 	return &database.Event{
 		ID:           apiEvent.EventID,
 		Name:         apiEvent.EventName,

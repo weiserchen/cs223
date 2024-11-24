@@ -8,7 +8,7 @@ import (
 
 type contextKey string
 
-var (
+const (
 	contextKeyRequestBody  contextKey = "request-body"
 	contextKeyRequestQuery contextKey = "request-query"
 )

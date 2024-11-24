@@ -1,6 +1,6 @@
 package v1
 
-var (
+const (
 	PathGetUser             = "/api/v1/user"
 	PathGetUserID           = "/api/v1/user_id"
 	PathGetUserName         = "/api/v1/user_name"
@@ -21,9 +21,9 @@ var (
 	PathCreateEventLog = "/api/v1/event_log"
 	PathGetEventLogs   = "/api/v1/event_logs"
 
-	PathTxCreateEvent = "/api/v1/tx/create_event"
-	PathTxUpdateEvent = "/api/v1/tx/update_event"
-	PathTxDeleteEvent = "/api/v1/tx/delete_event"
+	PathTxCreateEvent = "/api/v1/tx/event"
+	PathTxUpdateEvent = "/api/v1/tx/event"
+	PathTxDeleteEvent = "/api/v1/tx/event"
 	PathTxJoinEvent   = "/api/v1/tx/join_event"
 	PathTxLeaveEvent  = "/api/v1/tx/leave_event"
 )

@@ -154,3 +154,23 @@ func GetRequestGetEventLogs(client *http.Client, addr string, params *RequestGet
 func PostRequestCreateEventLog(client *http.Client, addr string, params *RequestCreateEventLog) (*ResponseCreateEventLog, error) {
 	return PostRequest[RequestCreateEventLog, ResponseCreateEventLog](client, addr, PathCreateEventLog, http.StatusCreated, params)
 }
+
+func PostRequestTxCreateEvent(client *http.Client, addr string, params *RequestTxCreateEvent) (*ResponseTxCreateEvent, error) {
+	return PostRequest[RequestTxCreateEvent, ResponseTxCreateEvent](client, addr, PathTxCreateEvent, http.StatusCreated, params)
+}
+
+func PutRequestTxUpdateEvent(client *http.Client, addr string, params *RequestTxUpdateEvent) (*ResponseTxUpdateEvent, error) {
+	return PutRequest[RequestTxUpdateEvent, ResponseTxUpdateEvent](client, addr, PathTxUpdateEvent, http.StatusNoContent, params)
+}
+
+func DeleteRequestTxDeleteEvent(client *http.Client, addr string, params *RequestTxDeleteEvent) (*ResponseTxDeleteEvent, error) {
+	return DeleteRequest[RequestTxDeleteEvent, ResponseTxDeleteEvent](client, addr, PathTxDeleteEvent, http.StatusNoContent, params)
+}
+
+func PutRequestTxJoinEvent(client *http.Client, addr string, params *RequestTxJoinEvent) (*ResponseTxJoinEvent, error) {
+	return PutRequest[RequestTxJoinEvent, ResponseTxJoinEvent](client, addr, PathTxJoinEvent, http.StatusNoContent, params)
+}
+
+func PutRequestTxLeaveEvent(client *http.Client, addr string, params *RequestTxLeaveEvent) (*ResponseTxLeaveEvent, error) {
+	return PutRequest[RequestTxLeaveEvent, ResponseTxLeaveEvent](client, addr, PathTxLeaveEvent, http.StatusNoContent, params)
+}

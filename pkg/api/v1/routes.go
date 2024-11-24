@@ -69,13 +69,13 @@ func NewUserRoutes(cfg *router.Config) []router.Route {
 			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestTxCreateEvent]},
 		},
 		{
-			Verb:        http.MethodPost,
+			Verb:        http.MethodPut,
 			Path:        PathTxUpdateEvent,
 			Handler:     HandleTxUpdateEvent(cfg),
 			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestTxUpdateEvent]},
 		},
 		{
-			Verb:        http.MethodPost,
+			Verb:        http.MethodDelete,
 			Path:        PathTxDeleteEvent,
 			Handler:     HandleTxDeleteEvent(cfg),
 			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestTxDeleteEvent]},

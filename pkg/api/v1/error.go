@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-var (
+const (
 	DefaultTimeout = 30 * time.Second
 )
 

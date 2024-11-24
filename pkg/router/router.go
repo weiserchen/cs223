@@ -73,9 +73,10 @@ func (r *Router) Build() (err error) {
 	if r.cfg.Getenv(ConfigTableEventLog) == "true" {
 		r.cfg.DB.EventLogStore = database.NewTableEventLog(r.cfg.DBConn)
 	}
-	r.cfg.Peers[ServiceUser] = r.cfg.Getenv(ConfigServiceUserAddr)
-	r.cfg.Peers[ServiceEvent] = r.cfg.Getenv(ConfigServiceEventAddr)
-	r.cfg.Peers[ServiceEventLog] = r.cfg.Getenv(ConfigServiceEventLogAddr)
+	log.Println(r.cfg.Getenv(ConfigServiceUserAddr), r.cfg.Getenv(ConfigServiceEventAddr), r.cfg.Getenv(ConfigServiceEventLogAddr))
+	r.cfg.Peers[ServiceUser] = "http://" + r.cfg.Getenv(ConfigServiceUserAddr)
+	r.cfg.Peers[ServiceEvent] = "http://" + r.cfg.Getenv(ConfigServiceEventAddr)
+	r.cfg.Peers[ServiceEventLog] = "http://" + r.cfg.Getenv(ConfigServiceEventLogAddr)
 	return nil
 }
 

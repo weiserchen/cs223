@@ -8,7 +8,7 @@ import (
 
 type TxType int
 
-var (
+const (
 	TxTypeRead  TxType = 0
 	TxTypeWrite TxType = 1
 )
