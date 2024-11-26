@@ -29,7 +29,7 @@ func TestEventAPI(t *testing.T) {
 	)
 
 	client := DefaultHTTPClient()
-	server := NewTestServer(t, r.Routes(), DefaultEventServerAddr)
+	server := NewTestServer(t, r.Handler(), DefaultEventServerAddr)
 
 	event := &APIEvent{
 		EventName:    "Test Event",

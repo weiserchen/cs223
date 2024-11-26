@@ -40,7 +40,7 @@ func getDefaultConfig(env map[string]string) *router.Config {
 	return cfg
 }
 
-func getRouter() *router.Router {
+func getRouter() *router.Engine {
 	env := getDefaultEnv()
 	cfg := getDefaultConfig(env)
 	r := router.New(cfg)

@@ -47,7 +47,7 @@ func DefaultUserRouter(
 	serverUserAddr string,
 	serverEventAddr string,
 	serverEventLogAddr string,
-) *router.Router {
+) *router.Engine {
 	env := DefaultEnv()
 	env[router.ConfigTableUser] = "true"
 	env[router.ConfigDatabaseURL] = databaseURL
@@ -71,7 +71,7 @@ func DefaultEventRouter(
 	serverUserAddr string,
 	serverEventAddr string,
 	serverEventLogAddr string,
-) *router.Router {
+) *router.Engine {
 	env := DefaultEnv()
 	env[router.ConfigTableEvent] = "true"
 	env[router.ConfigDatabaseURL] = databaseURL
@@ -95,7 +95,7 @@ func DefaultEventLogRouter(
 	serverUserAddr string,
 	serverEventAddr string,
 	serverEventLogAddr string,
-) *router.Router {
+) *router.Engine {
 	env := DefaultEnv()
 	env[router.ConfigTableEventLog] = "true"
 	env[router.ConfigDatabaseURL] = databaseURL

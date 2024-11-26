@@ -29,7 +29,7 @@ func TestUserAPI(t *testing.T) {
 	)
 
 	client := DefaultHTTPClient()
-	server := NewTestServer(t, r.Routes(), DefaultUserServerAddr)
+	server := NewTestServer(t, r.Handler(), DefaultUserServerAddr)
 
 	log.Println(server.URL)
 

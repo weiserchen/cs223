@@ -29,7 +29,7 @@ func TestEventLogAPI(t *testing.T) {
 	)
 
 	client := DefaultHTTPClient()
-	server := NewTestServer(t, r.Routes(), DefaultEventLogServerAddr)
+	server := NewTestServer(t, r.Handler(), DefaultEventLogServerAddr)
 
 	log.Println(server.URL)
 

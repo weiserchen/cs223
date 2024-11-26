@@ -32,7 +32,7 @@ func TestCalendarTxAPI(t *testing.T) {
 			DefaultEventLogServerAddr,
 		)
 
-		serverUser = NewTestServer(t, r.Routes(), DefaultUserServerAddr)
+		serverUser = NewTestServer(t, r.Handler(), DefaultUserServerAddr)
 	}
 	{
 		pgc, err := database.NewContainerTableEvents(t, "17.1")
@@ -50,7 +50,7 @@ func TestCalendarTxAPI(t *testing.T) {
 			DefaultEventLogServerAddr,
 		)
 
-		serverEvent = NewTestServer(t, r.Routes(), DefaultEventServerAddr)
+		serverEvent = NewTestServer(t, r.Handler(), DefaultEventServerAddr)
 	}
 	{
 		pgc, err := database.NewContainerTableEventLogs(t, "17.1")
@@ -68,7 +68,7 @@ func TestCalendarTxAPI(t *testing.T) {
 			DefaultEventLogServerAddr,
 		)
 
-		serverEventLog = NewTestServer(t, r.Routes(), DefaultEventLogServerAddr)
+		serverEventLog = NewTestServer(t, r.Handler(), DefaultEventLogServerAddr)
 	}
 
 	client = DefaultHTTPClient()

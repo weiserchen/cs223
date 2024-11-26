@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"log"
 	"slices"
 	"time"
 
@@ -106,7 +105,6 @@ func (table *TableEvent) CreateEvent(ctx context.Context, event *Event) (int64, 
 		event.Location,
 		event.Participants,
 	).Scan(&eventID); err != nil {
-		log.Println(err)
 		return -1, err
 	}
 

@@ -1,154 +1,92 @@
 package v1
 
 import (
-	"net/http"
 	"txchain/pkg/middleware"
 	"txchain/pkg/router"
 )
 
 func NewUserRoutes(cfg *router.Config) []router.Route {
-	return []router.Route{
+	r := router.New(cfg)
+
+	apiV1 := r.Prefix("/api/v1")
+	{
+		user := apiV1.Prefix("/user")
 		{
-			Verb:        http.MethodGet,
-			Path:        PathGetUser,
-			Handler:     HandleGetUser(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateQuery[RequestGetUser]},
-		},
+			user.Get("/", middleware.ValidateQuery[RequestGetUser](HandleGetUser(cfg)))
+			user.Post("/", middleware.ValidateBody[RequestCreateUser](HandleCreateUser(cfg)))
+			user.Delete("/", middleware.ValidateBody[RequestDeleteUser](HandleDeleteUser(cfg)))
+
+			user.Get("/id", middleware.ValidateQuery[RequestGetUserID](HandleGetUserID(cfg)))
+
+			name := user.Prefix("/name")
+			{
+				name.Get("/", middleware.ValidateQuery[RequestGetUserName](HandleGetUserName(cfg)))
+				name.Put("/", middleware.ValidateBody[RequestUpdateUserName](HandleUpdateUserName(cfg)))
+			}
+
+			hostEvents := user.Prefix("/host_events")
+			{
+				hostEvents.Get("/", middleware.ValidateQuery[RequestGetUserHostEvents](HandleGetUserHostEvents(cfg)))
+				hostEvents.Put("/add", middleware.ValidateBody[RequestAddUserHostEvent](HandleAddUserHostEvent(cfg)))
+				hostEvents.Put("/remove", middleware.ValidateBody[RequestRemoveUserHostEvent](HandleRemoveUserHostEvent(cfg)))
+			}
+
+		}
+
+		tx := apiV1.Prefix("/tx")
 		{
-			Verb:        http.MethodGet,
-			Path:        PathGetUserID,
-			Handler:     HandleGetUserID(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateQuery[RequestGetUserID]},
-		},
-		{
-			Verb:        http.MethodGet,
-			Path:        PathGetUserName,
-			Handler:     HandleGetUserName(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateQuery[RequestGetUserName]},
-		},
-		{
-			Verb:        http.MethodPut,
-			Path:        PathUpdateUserName,
-			Handler:     HandleUpdateUserName(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestUpdateUserName]},
-		},
-		{
-			Verb:        http.MethodGet,
-			Path:        PathGetUserHostEvents,
-			Handler:     HandleGetUserHostEvents(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateQuery[RequestGetUserHostEvents]},
-		},
-		{
-			Verb:        http.MethodPost,
-			Path:        PathCreateUser,
-			Handler:     HandleCreateUser(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestCreateUser]},
-		},
-		{
-			Verb:        http.MethodDelete,
-			Path:        PathDeleteUser,
-			Handler:     HandleDeleteUser(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestDeleteUser]},
-		},
-		{
-			Verb:        http.MethodPut,
-			Path:        PathAddUserHostEvent,
-			Handler:     HandleAddUserHostEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestAddUserHostEvent]},
-		},
-		{
-			Verb:        http.MethodPut,
-			Path:        PathRemoveUserHostEvent,
-			Handler:     HandleRemoveUserHostEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestRemoveUserHostEvent]},
-		},
-		{
-			Verb:        http.MethodPost,
-			Path:        PathTxCreateEvent,
-			Handler:     HandleTxCreateEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestTxCreateEvent]},
-		},
-		{
-			Verb:        http.MethodPut,
-			Path:        PathTxUpdateEvent,
-			Handler:     HandleTxUpdateEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestTxUpdateEvent]},
-		},
-		{
-			Verb:        http.MethodDelete,
-			Path:        PathTxDeleteEvent,
-			Handler:     HandleTxDeleteEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestTxDeleteEvent]},
-		},
+			event := tx.Prefix("/event")
+			{
+				event.Post("/", middleware.ValidateBody[RequestTxCreateEvent](HandleTxCreateEvent(cfg)))
+				event.Put("/", middleware.ValidateBody[RequestTxUpdateEvent](HandleTxUpdateEvent(cfg)))
+				event.Delete("/", middleware.ValidateBody[RequestTxDeleteEvent](HandleTxDeleteEvent(cfg)))
+			}
+		}
 	}
+
+	return r.Routes()
 }
 
 func NewEventRoutes(cfg *router.Config) []router.Route {
-	return []router.Route{
+	r := router.New(cfg)
+
+	apiV1 := r.Prefix("/api/v1")
+	{
+		event := apiV1.Prefix("/event")
 		{
-			Verb:        http.MethodGet,
-			Path:        PathGetEvent,
-			Handler:     HandleGetEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateQuery[RequestGetEvent]},
-		},
+			event.Get("/", middleware.ValidateQuery[RequestGetEvent](HandleGetEvent(cfg)))
+			event.Post("/", middleware.ValidateBody[RequestCreateEvent](HandleCreateEvent(cfg)))
+			event.Put("/", middleware.ValidateBody[RequestUpdateEvent](HandleUpdateEvent(cfg)))
+			event.Delete("/", middleware.ValidateBody[RequestDeleteEvent](HandleDeleteEvent(cfg)))
+
+			participants := event.Prefix("participants")
+			{
+				participants.Put("/add", middleware.ValidateBody[RequestAddEventParticipant](HandleAddEventParticipant(cfg)))
+				participants.Put("/remove", middleware.ValidateBody[RequestRemoveEventParticipant](HandleRemoveEventParticipant(cfg)))
+			}
+		}
+
+		tx := apiV1.Prefix("/tx")
 		{
-			Verb:        http.MethodPost,
-			Path:        PathCreateEvent,
-			Handler:     HandleCreateEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestCreateEvent]},
-		},
-		{
-			Verb:        http.MethodPut,
-			Path:        PathUpdateEvent,
-			Handler:     HandleUpdateEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestUpdateEvent]},
-		},
-		{
-			Verb:        http.MethodDelete,
-			Path:        PathDeleteEvent,
-			Handler:     HandleDeleteEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestDeleteEvent]},
-		},
-		{
-			Verb:        http.MethodPut,
-			Path:        PathAddEventParticipant,
-			Handler:     HandleAddEventParticipant(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestAddEventParticipant]},
-		},
-		{
-			Verb:        http.MethodPut,
-			Path:        PathRemoveEventParticipant,
-			Handler:     HandleRemoveEventParticipant(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestRemoveEventParticipant]},
-		},
-		{
-			Verb:        http.MethodPut,
-			Path:        PathTxJoinEvent,
-			Handler:     HandleTxJoinEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestTxJoinEvent]},
-		},
-		{
-			Verb:        http.MethodPut,
-			Path:        PathTxLeaveEvent,
-			Handler:     HandleTxLeaveEvent(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestTxLeaveEvent]},
-		},
+			event := tx.Prefix("/event")
+			{
+				event.Put("/join", middleware.ValidateBody[RequestTxJoinEvent](HandleTxJoinEvent(cfg)))
+				event.Put("/leave", middleware.ValidateBody[RequestTxLeaveEvent](HandleTxLeaveEvent(cfg)))
+			}
+		}
 	}
+
+	return r.Routes()
 }
 
 func NewEventLogRoutes(cfg *router.Config) []router.Route {
-	return []router.Route{
-		{
-			Verb:        http.MethodGet,
-			Path:        PathGetEventLogs,
-			Handler:     HandleGetEventLogs(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateQuery[RequestGetEventLogs]},
-		},
-		{
-			Verb:        http.MethodPost,
-			Path:        PathCreateEventLog,
-			Handler:     HandleCreateEventLog(cfg),
-			Middlewares: []middleware.Middlerware{middleware.ValidateBody[RequestCreateEventLog]},
-		},
+	r := router.New(cfg)
+
+	apiV1 := r.Prefix("/api/v1")
+	{
+		apiV1.Get("/event_logs", middleware.ValidateQuery[RequestGetEventLogs](HandleGetEventLogs(cfg)))
+		apiV1.Post("/event_log", middleware.ValidateBody[RequestCreateEventLog](HandleCreateEventLog(cfg)))
 	}
+
+	return r.Routes()
 }
