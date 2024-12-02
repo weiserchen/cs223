@@ -30,8 +30,8 @@ func DefaultEnv() map[string]string {
 	return map[string]string{}
 }
 
-func DefaultConfig(env map[string]string) *router.Config {
-	cfg := router.NewConfig(
+func DefaultConfig(env map[string]string) (*router.Config, error) {
+	return router.NewConfig(
 		context.Background(),
 		os.Stdin,
 		os.Stdout,
@@ -39,7 +39,6 @@ func DefaultConfig(env map[string]string) *router.Config {
 		router.CustomEnv(env, os.Getenv),
 		os.Args,
 	)
-	return cfg
 }
 
 func DefaultUserRouter(
@@ -47,7 +46,7 @@ func DefaultUserRouter(
 	serverUserAddr string,
 	serverEventAddr string,
 	serverEventLogAddr string,
-) *router.Engine {
+) (*router.Engine, error) {
 	env := DefaultEnv()
 	env[router.ConfigTableUser] = "true"
 	env[router.ConfigDatabaseURL] = databaseURL
@@ -55,15 +54,17 @@ func DefaultUserRouter(
 	env[router.ConfigServiceEventAddr] = serverEventAddr
 	env[router.ConfigServiceEventLogAddr] = serverEventLogAddr
 
-	cfg := DefaultConfig(env)
+	cfg, err := DefaultConfig(env)
+	if err != nil {
+		return nil, err
+	}
 	r := router.New(cfg)
 	routes := NewUserRoutes(cfg)
 	for _, route := range routes {
 		r.AddRoute(route)
 	}
 
-	r.Build()
-	return r
+	return r, nil
 }
 
 func DefaultEventRouter(
@@ -71,7 +72,7 @@ func DefaultEventRouter(
 	serverUserAddr string,
 	serverEventAddr string,
 	serverEventLogAddr string,
-) *router.Engine {
+) (*router.Engine, error) {
 	env := DefaultEnv()
 	env[router.ConfigTableEvent] = "true"
 	env[router.ConfigDatabaseURL] = databaseURL
@@ -79,15 +80,17 @@ func DefaultEventRouter(
 	env[router.ConfigServiceEventAddr] = serverEventAddr
 	env[router.ConfigServiceEventLogAddr] = serverEventLogAddr
 
-	cfg := DefaultConfig(env)
+	cfg, err := DefaultConfig(env)
+	if err != nil {
+		return nil, err
+	}
 	r := router.New(cfg)
 	routes := NewEventRoutes(cfg)
 	for _, route := range routes {
 		r.AddRoute(route)
 	}
 
-	r.Build()
-	return r
+	return r, nil
 }
 
 func DefaultEventLogRouter(
@@ -95,7 +98,7 @@ func DefaultEventLogRouter(
 	serverUserAddr string,
 	serverEventAddr string,
 	serverEventLogAddr string,
-) *router.Engine {
+) (*router.Engine, error) {
 	env := DefaultEnv()
 	env[router.ConfigTableEventLog] = "true"
 	env[router.ConfigDatabaseURL] = databaseURL
@@ -103,15 +106,17 @@ func DefaultEventLogRouter(
 	env[router.ConfigServiceEventAddr] = serverEventAddr
 	env[router.ConfigServiceEventLogAddr] = serverEventLogAddr
 
-	cfg := DefaultConfig(env)
+	cfg, err := DefaultConfig(env)
+	if err != nil {
+		return nil, err
+	}
 	r := router.New(cfg)
 	routes := NewEventLogRoutes(cfg)
 	for _, route := range routes {
 		r.AddRoute(route)
 	}
 
-	r.Build()
-	return r
+	return r, nil
 }
 
 func NewTestServer(t *testing.T, handler http.Handler, addr string) *httptest.Server {

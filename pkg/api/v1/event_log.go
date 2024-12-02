@@ -56,7 +56,7 @@ func HandleCreateEventLog(cfg *router.Config) http.Handler {
 		var logID int64
 		var err error
 
-		req := middleware.MarshalBody[RequestCreateEventLog](r)
+		req := middleware.MarshalRequest[RequestCreateEventLog](r)
 		logID, err = cfg.DB.EventLogStore.CreateEventLog(
 			cfg.Ctx,
 			req.EventID,
@@ -89,7 +89,7 @@ func HandleGetEventLogs(cfg *router.Config) http.Handler {
 		var dbEventLogs []*database.EventLog
 		var err error
 
-		req := middleware.MarshalQuery[RequestGetEventLogs](r)
+		req := middleware.MarshalRequest[RequestGetEventLogs](r)
 		dbEventLogs, err = cfg.DB.EventLogStore.GetEventLogs(cfg.Ctx, req.EventID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetEventLogs, err), http.StatusInternalServerError)

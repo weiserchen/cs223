@@ -9,7 +9,10 @@ import (
 )
 
 func main() {
-	r := getRouter()
+	r, err := getRouter()
+	if err != nil {
+		os.Exit(1)
+	}
 	if err := r.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
@@ -28,8 +31,8 @@ func getDefaultEnv() map[string]string {
 	}
 }
 
-func getDefaultConfig(env map[string]string) *router.Config {
-	cfg := router.NewConfig(
+func getDefaultConfig(env map[string]string) (*router.Config, error) {
+	return router.NewConfig(
 		context.Background(),
 		os.Stdin,
 		os.Stdout,
@@ -37,16 +40,18 @@ func getDefaultConfig(env map[string]string) *router.Config {
 		router.CustomEnv(env, os.Getenv),
 		os.Args,
 	)
-	return cfg
 }
 
-func getRouter() *router.Engine {
+func getRouter() (*router.Engine, error) {
 	env := getDefaultEnv()
-	cfg := getDefaultConfig(env)
+	cfg, err := getDefaultConfig(env)
+	if err != nil {
+		return nil, err
+	}
 	r := router.New(cfg)
 	routes := apiV1.NewEventLogRoutes(cfg)
 	for _, route := range routes {
 		r.AddRoute(route)
 	}
-	return r
+	return r, err
 }

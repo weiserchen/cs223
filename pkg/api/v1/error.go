@@ -36,8 +36,12 @@ var (
 	ErrTxJoinEvent   = errors.New("tx: failed to join event")
 	ErrTxLeaveEvent  = errors.New("tx: failed to leave event")
 
+	ErrTestTxFilterType = errors.New("test tx: invalid tx filter type")
+	ErrTestTxFilterOp   = errors.New("test tx: invalid tx filter operation")
+
 	ErrInvalidRequestParam = errors.New("invalid request param")
 	ErrBadRequest          = errors.New("bad request")
 	ErrBadResponseCode     = errors.New("bad response code")
 	ErrInvalidResponseBody = errors.New("invalid response body")
+	ErrServiceUnavailable  = errors.New("service unavailable")
 )

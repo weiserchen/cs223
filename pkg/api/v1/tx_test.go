@@ -25,12 +25,13 @@ func TestCalendarTxAPI(t *testing.T) {
 		}()
 		require.NoError(t, err)
 
-		r := DefaultUserRouter(
+		r, err := DefaultUserRouter(
 			pgc.Endpoint(),
 			DefaultUserServerAddr,
 			DefaultEventServerAddr,
 			DefaultEventLogServerAddr,
 		)
+		require.NoError(t, err)
 
 		serverUser = NewTestServer(t, r.Handler(), DefaultUserServerAddr)
 	}
@@ -43,12 +44,13 @@ func TestCalendarTxAPI(t *testing.T) {
 		}()
 		require.NoError(t, err)
 
-		r := DefaultEventRouter(
+		r, err := DefaultEventRouter(
 			pgc.Endpoint(),
 			DefaultUserServerAddr,
 			DefaultEventServerAddr,
 			DefaultEventLogServerAddr,
 		)
+		require.NoError(t, err)
 
 		serverEvent = NewTestServer(t, r.Handler(), DefaultEventServerAddr)
 	}
@@ -61,12 +63,13 @@ func TestCalendarTxAPI(t *testing.T) {
 		}()
 		require.NoError(t, err)
 
-		r := DefaultEventLogRouter(
+		r, err := DefaultEventLogRouter(
 			pgc.Endpoint(),
 			DefaultUserServerAddr,
 			DefaultEventServerAddr,
 			DefaultEventLogServerAddr,
 		)
+		require.NoError(t, err)
 
 		serverEventLog = NewTestServer(t, r.Handler(), DefaultEventLogServerAddr)
 	}

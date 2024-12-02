@@ -62,7 +62,7 @@ func HandleGetEvent(cfg *router.Config) http.Handler {
 		var dbEvent *database.Event
 		var err error
 
-		req := middleware.MarshalQuery[RequestGetEvent](r)
+		req := middleware.MarshalRequest[RequestGetEvent](r)
 		dbEvent, err = cfg.DB.EventStore.GetEvent(cfg.Ctx, req.EventID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetEvent, err), http.StatusInternalServerError)
@@ -90,7 +90,7 @@ func HandleCreateEvent(cfg *router.Config) http.Handler {
 		var dbEvent *database.Event
 		var err error
 
-		req := middleware.MarshalBody[RequestCreateEvent](r)
+		req := middleware.MarshalRequest[RequestCreateEvent](r)
 		dbEvent = APIEventToDatabaseEvent(req.Event)
 		eventID, err = cfg.DB.EventStore.CreateEvent(cfg.Ctx, dbEvent)
 		if err != nil {
@@ -117,7 +117,7 @@ func HandleUpdateEvent(cfg *router.Config) http.Handler {
 		var dbEvent *database.Event
 		var err error
 
-		req := middleware.MarshalBody[RequestUpdateEvent](r)
+		req := middleware.MarshalRequest[RequestUpdateEvent](r)
 		dbEvent = APIEventToDatabaseEvent(req.Event)
 		err = cfg.DB.EventStore.UpdateEvent(cfg.Ctx, dbEvent)
 		if err != nil {
@@ -141,7 +141,7 @@ func HandleDeleteEvent(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalBody[RequestDeleteEvent](r)
+		req := middleware.MarshalRequest[RequestDeleteEvent](r)
 		err = cfg.DB.EventStore.DeleteEvent(cfg.Ctx, req.EventID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrDeleteEvent, err), http.StatusInternalServerError)
@@ -165,7 +165,7 @@ func HandleAddEventParticipant(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalBody[RequestAddEventParticipant](r)
+		req := middleware.MarshalRequest[RequestAddEventParticipant](r)
 		err = cfg.DB.EventStore.AddParticipant(cfg.Ctx, req.EventID, req.ParticipantID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrAddEventParticipant, err), http.StatusInternalServerError)
@@ -189,7 +189,7 @@ func HandleRemoveEventParticipant(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalBody[RequestRemoveEventParticipant](r)
+		req := middleware.MarshalRequest[RequestRemoveEventParticipant](r)
 		err = cfg.DB.EventStore.RemoveParticipant(cfg.Ctx, req.EventID, req.ParticipantID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrRemoveEventParticipant, err), http.StatusInternalServerError)

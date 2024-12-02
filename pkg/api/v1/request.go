@@ -56,6 +56,10 @@ func Request[In, Out any](client *http.Client, method, addr, path string, code i
 		if res.StatusCode == http.StatusNotFound {
 			return nil, fmt.Errorf("%w: %d", ErrBadResponseCode, res.StatusCode)
 		}
+		if res.StatusCode == http.StatusServiceUnavailable {
+			return nil, fmt.Errorf("%w: %d", ErrServiceUnavailable, res.StatusCode)
+		}
+
 		var errResp format.ErrorResponse
 		if err = json.NewDecoder(res.Body).Decode(&errResp); err != nil {
 			return nil, fmt.Errorf("%w: %d. error msg: %v", ErrBadResponseCode, res.StatusCode, err)

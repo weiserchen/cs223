@@ -1,7 +1,6 @@
 package router
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,28 +8,37 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
-	"txchain/pkg/database"
 	"txchain/pkg/middleware"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type RouterMode string
 
 type Route struct {
-	Method  string
-	Path    string
-	Handler http.Handler
+	method  string
+	path    string
+	handler http.Handler
+}
+
+func NewRoute(method, path string, handler http.Handler) *Route {
+	return &Route{
+		method:  method,
+		path:    path,
+		handler: handler,
+	}
+}
+
+func (r *Route) Apply(middlewares ...middleware.Middlerware) {
+	r.handler = middleware.Chain(r.handler, middlewares...)
 }
 
 type Router struct {
-	routes      map[string]map[string]http.Handler
+	routes      map[string]map[string]*Route
 	groups      map[string]*Router
 	middlewares []middleware.Middlerware
 }
 
 func NewRouter() *Router {
-	routes := map[string]map[string]http.Handler{}
+	routes := map[string]map[string]*Route{}
 	methods := []string{
 		http.MethodGet,
 		http.MethodPost,
@@ -41,7 +49,7 @@ func NewRouter() *Router {
 		http.MethodOptions,
 	}
 	for _, method := range methods {
-		routes[method] = make(map[string]http.Handler)
+		routes[method] = make(map[string]*Route)
 	}
 	return &Router{
 		routes:      routes,
@@ -59,19 +67,19 @@ func (r *Router) Prefix(prefix string) *Router {
 	return group
 }
 
-func (r *Router) ApplyMiddleware(middlewares ...middleware.Middlerware) {
+func (r *Router) Apply(middlewares ...middleware.Middlerware) {
 	r.middlewares = append(r.middlewares, middlewares...)
 }
 
 func (r *Router) Routes() []Route {
 	routes := []Route{}
 
-	for method, route := range r.routes {
-		for path, handler := range route {
+	for method, paths := range r.routes {
+		for path, route := range paths {
 			routes = append(routes, Route{
-				Method:  method,
-				Path:    filepath.Clean(path),
-				Handler: middleware.Chain(handler, r.middlewares...),
+				method:  method,
+				path:    filepath.Clean(path),
+				handler: middleware.Chain(route.handler, r.middlewares...),
 			})
 		}
 	}
@@ -79,41 +87,55 @@ func (r *Router) Routes() []Route {
 	for prefix, group := range r.groups {
 		for _, route := range group.Routes() {
 			routes = append(routes, Route{
-				Method:  route.Method,
-				Path:    filepath.Clean(path.Join(prefix, route.Path)),
-				Handler: middleware.Chain(route.Handler, r.middlewares...),
+				method:  route.method,
+				path:    filepath.Clean(path.Join(prefix, route.path)),
+				handler: middleware.Chain(route.handler, r.middlewares...),
 			})
 		}
 	}
 	return routes
 }
 
-func (r *Router) Get(path string, handler http.Handler) {
-	r.routes[http.MethodGet][path] = handler
+func (r *Router) Get(path string, handler http.Handler) *Route {
+	route := NewRoute(http.MethodGet, path, handler)
+	r.routes[http.MethodGet][path] = route
+	return route
 }
 
-func (r *Router) Post(path string, handler http.Handler) {
-	r.routes[http.MethodPost][path] = handler
+func (r *Router) Post(path string, handler http.Handler) *Route {
+	route := NewRoute(http.MethodPost, path, handler)
+	r.routes[http.MethodPost][path] = route
+	return route
 }
 
-func (r *Router) Put(path string, handler http.Handler) {
-	r.routes[http.MethodPut][path] = handler
+func (r *Router) Put(path string, handler http.Handler) *Route {
+	route := NewRoute(http.MethodPut, path, handler)
+	r.routes[http.MethodPut][path] = route
+	return route
 }
 
-func (r *Router) Patch(path string, handler http.Handler) {
-	r.routes[http.MethodPatch][path] = handler
+func (r *Router) Patch(path string, handler http.Handler) *Route {
+	route := NewRoute(http.MethodPatch, path, handler)
+	r.routes[http.MethodPatch][path] = route
+	return route
 }
 
-func (r *Router) Delete(path string, handler http.Handler) {
-	r.routes[http.MethodDelete][path] = handler
+func (r *Router) Delete(path string, handler http.Handler) *Route {
+	route := NewRoute(http.MethodDelete, path, handler)
+	r.routes[http.MethodDelete][path] = route
+	return route
 }
 
-func (r *Router) Head(path string, handler http.Handler) {
-	r.routes[http.MethodHead][path] = handler
+func (r *Router) Head(path string, handler http.Handler) *Route {
+	route := NewRoute(http.MethodHead, path, handler)
+	r.routes[http.MethodHead][path] = route
+	return route
 }
 
-func (r *Router) Options(path string, handler http.Handler) {
-	r.routes[http.MethodOptions][path] = handler
+func (r *Router) Options(path string, handler http.Handler) *Route {
+	route := NewRoute(http.MethodOptions, path, handler)
+	r.routes[http.MethodOptions][path] = route
+	return route
 }
 
 type Engine struct {
@@ -134,8 +156,8 @@ func (r *Engine) Prefix(prefix string) *Router {
 	return r.router.Prefix(prefix)
 }
 
-func (r *Engine) ApplyMiddleware(middlewares ...middleware.Middlerware) {
-	r.router.ApplyMiddleware(middlewares...)
+func (r *Engine) Apply(middlewares ...middleware.Middlerware) {
+	r.router.Apply(middlewares...)
 }
 
 func (r *Engine) Routes() []Route {
@@ -151,48 +173,15 @@ func (r *Engine) Handler() http.Handler {
 	routes := r.Routes()
 	routes = append(routes, r.customRoutes...)
 	for _, route := range routes {
-		path := fmt.Sprintf("%s %s", route.Method, route.Path)
+		path := fmt.Sprintf("%s %s", route.method, route.path)
 		log.Println(path)
-		mux.Handle(path, route.Handler)
+		mux.Handle(path, route.handler)
 	}
 	r.mux = mux
 	return r.mux
 }
 
-func (r *Engine) Build() (err error) {
-	r.cfg.Ctx = context.Background()
-
-	r.cfg.DBURL = r.cfg.Getenv(ConfigDatabaseURL)
-	conn, err := pgxpool.New(context.Background(), r.cfg.DBURL)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDatabaseConnection, err)
-	}
-	r.cfg.DBConn = conn
-	defer func() {
-		if err != nil {
-			conn.Close()
-		}
-	}()
-
-	if r.cfg.Getenv(ConfigTableUser) == "true" {
-		r.cfg.DB.UserStore = database.NewTableUser(r.cfg.DBConn)
-	}
-	if r.cfg.Getenv(ConfigTableEvent) == "true" {
-		r.cfg.DB.EventStore = database.NewTableEvent(r.cfg.DBConn)
-	}
-	if r.cfg.Getenv(ConfigTableEventLog) == "true" {
-		r.cfg.DB.EventLogStore = database.NewTableEventLog(r.cfg.DBConn)
-	}
-	log.Println(r.cfg.Getenv(ConfigServiceUserAddr), r.cfg.Getenv(ConfigServiceEventAddr), r.cfg.Getenv(ConfigServiceEventLogAddr))
-	r.cfg.Peers[ServiceUser] = "http://" + r.cfg.Getenv(ConfigServiceUserAddr)
-	r.cfg.Peers[ServiceEvent] = "http://" + r.cfg.Getenv(ConfigServiceEventAddr)
-	r.cfg.Peers[ServiceEventLog] = "http://" + r.cfg.Getenv(ConfigServiceEventLogAddr)
-	return nil
-}
-
 func (r *Engine) Run() error {
-	r.Build()
-
 	interrupts := []os.Signal{
 		os.Interrupt,
 	}

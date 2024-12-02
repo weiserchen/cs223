@@ -12,23 +12,22 @@ func NewUserRoutes(cfg *router.Config) []router.Route {
 	{
 		user := apiV1.Prefix("/user")
 		{
-			user.Get("/", middleware.ValidateQuery[RequestGetUser](HandleGetUser(cfg)))
-			user.Post("/", middleware.ValidateBody[RequestCreateUser](HandleCreateUser(cfg)))
-			user.Delete("/", middleware.ValidateBody[RequestDeleteUser](HandleDeleteUser(cfg)))
-
-			user.Get("/id", middleware.ValidateQuery[RequestGetUserID](HandleGetUserID(cfg)))
+			user.Get("/", HandleGetUser(cfg)).Apply(middleware.ValidateQuery[RequestGetUser])
+			user.Post("/", HandleCreateUser(cfg)).Apply(middleware.ValidateBody[RequestCreateUser])
+			user.Delete("/", HandleDeleteUser(cfg)).Apply(middleware.ValidateBody[RequestDeleteUser])
+			user.Get("/id", HandleGetUserID(cfg)).Apply(middleware.ValidateQuery[RequestGetUserID])
 
 			name := user.Prefix("/name")
 			{
-				name.Get("/", middleware.ValidateQuery[RequestGetUserName](HandleGetUserName(cfg)))
-				name.Put("/", middleware.ValidateBody[RequestUpdateUserName](HandleUpdateUserName(cfg)))
+				name.Get("/", HandleGetUserName(cfg)).Apply(middleware.ValidateQuery[RequestGetUserName])
+				name.Put("/", HandleUpdateUserName(cfg)).Apply(middleware.ValidateBody[RequestUpdateUserName])
 			}
 
 			hostEvents := user.Prefix("/host_events")
 			{
-				hostEvents.Get("/", middleware.ValidateQuery[RequestGetUserHostEvents](HandleGetUserHostEvents(cfg)))
-				hostEvents.Put("/add", middleware.ValidateBody[RequestAddUserHostEvent](HandleAddUserHostEvent(cfg)))
-				hostEvents.Put("/remove", middleware.ValidateBody[RequestRemoveUserHostEvent](HandleRemoveUserHostEvent(cfg)))
+				hostEvents.Get("/", HandleGetUserHostEvents(cfg)).Apply(middleware.ValidateQuery[RequestGetUserHostEvents])
+				hostEvents.Put("/add", HandleAddUserHostEvent(cfg)).Apply(middleware.ValidateBody[RequestAddUserHostEvent])
+				hostEvents.Put("/remove", HandleRemoveUserHostEvent(cfg)).Apply(middleware.ValidateBody[RequestRemoveUserHostEvent])
 			}
 
 		}
@@ -37,9 +36,9 @@ func NewUserRoutes(cfg *router.Config) []router.Route {
 		{
 			event := tx.Prefix("/event")
 			{
-				event.Post("/", middleware.ValidateBody[RequestTxCreateEvent](HandleTxCreateEvent(cfg)))
-				event.Put("/", middleware.ValidateBody[RequestTxUpdateEvent](HandleTxUpdateEvent(cfg)))
-				event.Delete("/", middleware.ValidateBody[RequestTxDeleteEvent](HandleTxDeleteEvent(cfg)))
+				event.Post("/", HandleTxCreateEvent(cfg)).Apply(middleware.ValidateBody[RequestTxCreateEvent])
+				event.Put("/", HandleTxUpdateEvent(cfg)).Apply(middleware.ValidateBody[RequestTxUpdateEvent])
+				event.Delete("/", HandleTxDeleteEvent(cfg)).Apply(middleware.ValidateBody[RequestTxDeleteEvent])
 			}
 		}
 	}
@@ -54,15 +53,15 @@ func NewEventRoutes(cfg *router.Config) []router.Route {
 	{
 		event := apiV1.Prefix("/event")
 		{
-			event.Get("/", middleware.ValidateQuery[RequestGetEvent](HandleGetEvent(cfg)))
-			event.Post("/", middleware.ValidateBody[RequestCreateEvent](HandleCreateEvent(cfg)))
-			event.Put("/", middleware.ValidateBody[RequestUpdateEvent](HandleUpdateEvent(cfg)))
-			event.Delete("/", middleware.ValidateBody[RequestDeleteEvent](HandleDeleteEvent(cfg)))
+			event.Get("/", HandleGetEvent(cfg)).Apply(middleware.ValidateQuery[RequestGetEvent])
+			event.Post("/", HandleCreateEvent(cfg)).Apply(middleware.ValidateBody[RequestCreateEvent])
+			event.Put("/", HandleUpdateEvent(cfg)).Apply(middleware.ValidateBody[RequestUpdateEvent])
+			event.Delete("/", HandleDeleteEvent(cfg)).Apply(middleware.ValidateBody[RequestDeleteEvent])
 
 			participants := event.Prefix("participants")
 			{
-				participants.Put("/add", middleware.ValidateBody[RequestAddEventParticipant](HandleAddEventParticipant(cfg)))
-				participants.Put("/remove", middleware.ValidateBody[RequestRemoveEventParticipant](HandleRemoveEventParticipant(cfg)))
+				participants.Put("/add", HandleAddEventParticipant(cfg)).Apply(middleware.ValidateBody[RequestAddEventParticipant])
+				participants.Put("/remove", HandleRemoveEventParticipant(cfg)).Apply(middleware.ValidateBody[RequestRemoveEventParticipant])
 			}
 		}
 
@@ -70,8 +69,8 @@ func NewEventRoutes(cfg *router.Config) []router.Route {
 		{
 			event := tx.Prefix("/event")
 			{
-				event.Put("/join", middleware.ValidateBody[RequestTxJoinEvent](HandleTxJoinEvent(cfg)))
-				event.Put("/leave", middleware.ValidateBody[RequestTxLeaveEvent](HandleTxLeaveEvent(cfg)))
+				event.Put("/join", HandleTxJoinEvent(cfg)).Apply(middleware.ValidateBody[RequestTxJoinEvent])
+				event.Put("/leave", HandleTxLeaveEvent(cfg)).Apply(middleware.ValidateBody[RequestTxLeaveEvent])
 			}
 		}
 	}
@@ -84,9 +83,15 @@ func NewEventLogRoutes(cfg *router.Config) []router.Route {
 
 	apiV1 := r.Prefix("/api/v1")
 	{
-		apiV1.Get("/event_logs", middleware.ValidateQuery[RequestGetEventLogs](HandleGetEventLogs(cfg)))
-		apiV1.Post("/event_log", middleware.ValidateBody[RequestCreateEventLog](HandleCreateEventLog(cfg)))
+		apiV1.Get("/event_logs", HandleGetEventLogs(cfg)).Apply(middleware.ValidateQuery[RequestGetEventLogs])
+		apiV1.Post("/event_log", HandleCreateEventLog(cfg)).Apply(middleware.ValidateBody[RequestCreateEventLog])
 	}
+
+	return r.Routes()
+}
+
+func NewTestTxRoutes(cfg *router.Config) []router.Route {
+	r := router.New(cfg)
 
 	return r.Routes()
 }

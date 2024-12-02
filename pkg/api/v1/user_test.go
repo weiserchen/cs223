@@ -21,12 +21,13 @@ func TestUserAPI(t *testing.T) {
 	}()
 	require.NoError(t, err)
 
-	r := DefaultUserRouter(
+	r, err := DefaultUserRouter(
 		pgc.Endpoint(),
 		DefaultUserServerAddr,
 		DefaultEventServerAddr,
 		DefaultEventLogServerAddr,
 	)
+	require.NoError(t, err)
 
 	client := DefaultHTTPClient()
 	server := NewTestServer(t, r.Handler(), DefaultUserServerAddr)

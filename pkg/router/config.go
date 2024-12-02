@@ -3,7 +3,10 @@ package router
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"log"
+	"txchain/pkg/cc"
 	"txchain/pkg/database"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,6 +45,7 @@ type Config struct {
 	DBConn *pgxpool.Pool
 	DB     *database.DB
 	Peers  map[string]string
+	TxMgr  *cc.TxManager
 }
 
 func NewConfig(
@@ -51,8 +55,8 @@ func NewConfig(
 	stderr io.Writer,
 	getenv func(string) string,
 	args []string,
-) *Config {
-	return &Config{
+) (cfg *Config, err error) {
+	cfg = &Config{
 		Ctx:    ctx,
 		Stdin:  stdin,
 		Stdout: stdout,
@@ -62,6 +66,39 @@ func NewConfig(
 		DB:     &database.DB{},
 		Peers:  map[string]string{},
 	}
+
+	cfg.Ctx = context.Background()
+
+	cfg.DBURL = cfg.Getenv(ConfigDatabaseURL)
+	conn, err := pgxpool.New(context.Background(), cfg.DBURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDatabaseConnection, err)
+	}
+	cfg.DBConn = conn
+	defer func() {
+		if err != nil {
+			conn.Close()
+		}
+	}()
+
+	if cfg.Getenv(ConfigTableUser) == "true" {
+		cfg.DB.UserStore = database.NewTableUser(cfg.DBConn)
+	}
+	if cfg.Getenv(ConfigTableEvent) == "true" {
+		cfg.DB.EventStore = database.NewTableEvent(cfg.DBConn)
+	}
+	if cfg.Getenv(ConfigTableEventLog) == "true" {
+		cfg.DB.EventLogStore = database.NewTableEventLog(cfg.DBConn)
+	}
+	log.Println(cfg.Getenv(ConfigServiceUserAddr), cfg.Getenv(ConfigServiceEventAddr), cfg.Getenv(ConfigServiceEventLogAddr))
+	cfg.Peers[ServiceUser] = "http://" + cfg.Getenv(ConfigServiceUserAddr)
+	cfg.Peers[ServiceEvent] = "http://" + cfg.Getenv(ConfigServiceEventAddr)
+	cfg.Peers[ServiceEventLog] = "http://" + cfg.Getenv(ConfigServiceEventLogAddr)
+
+	services := []string{ServiceUser, ServiceEvent, ServiceEventLog}
+	cfg.TxMgr = cc.NewTxManager(cfg.DBConn, 0, services)
+
+	return cfg, nil
 }
 
 func CustomEnv(env map[string]string, next func(string) string) func(string) string {
