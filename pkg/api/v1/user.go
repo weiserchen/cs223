@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"txchain/pkg/database"
 	"txchain/pkg/format"
@@ -24,7 +25,7 @@ func HandleGetUser(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestGetUser](r)
-		user, err = cfg.DB.UserStore.GetUser(cfg.Ctx, req.UserID)
+		user, err = cfg.DB.UserStore.GetUser(r.Context(), req.UserID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetUser, err), http.StatusInternalServerError)
 			return
@@ -53,7 +54,7 @@ func HandleGetUserID(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestGetUserID](r)
-		userID, err = cfg.DB.UserStore.GetID(cfg.Ctx, req.UserName)
+		userID, err = cfg.DB.UserStore.GetID(r.Context(), req.UserName)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetUserID, err), http.StatusInternalServerError)
 			return
@@ -80,7 +81,7 @@ func HandleGetUserName(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestGetUserName](r)
-		userName, err = cfg.DB.UserStore.GetName(cfg.Ctx, req.UserID)
+		userName, err = cfg.DB.UserStore.GetName(r.Context(), req.UserID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetUserName, err), http.StatusInternalServerError)
 			return
@@ -107,7 +108,7 @@ func HandleGetUserHostEvents(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestGetUserHostEvents](r)
-		hostEvents, err = cfg.DB.UserStore.GetHostEvents(cfg.Ctx, req.UserID)
+		hostEvents, err = cfg.DB.UserStore.GetHostEvents(r.Context(), req.UserID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetUserHostEvents, err), http.StatusInternalServerError)
 			return
@@ -135,7 +136,12 @@ func HandleCreateUser(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestCreateUser](r)
-		userID, err = cfg.DB.UserStore.CreateUser(cfg.Ctx, req.UserName, req.HostEvents)
+		userID, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (int64, error) {
+				return cfg.DB.UserStore.CreateUser(ctx, req.UserName, req.HostEvents)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrCreateUser, err), http.StatusInternalServerError)
 			return
@@ -160,7 +166,12 @@ func HandleDeleteUser(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestDeleteUser](r)
-		err = cfg.DB.UserStore.DeleteUser(cfg.Ctx, req.UserID)
+		_, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (any, error) {
+				return cfg.DB.UserStore.DeleteUser(r.Context(), req.UserID)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrDeleteEvent, err), http.StatusInternalServerError)
 			return
@@ -184,7 +195,12 @@ func HandleUpdateUserName(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestUpdateUserName](r)
-		err = cfg.DB.UserStore.UpdateName(cfg.Ctx, req.UserID, req.UserName)
+		_, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (any, error) {
+				return cfg.DB.UserStore.UpdateName(r.Context(), req.UserID, req.UserName)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrUpdateUserName, err), http.StatusInternalServerError)
 			return
@@ -208,7 +224,12 @@ func HandleAddUserHostEvent(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestAddUserHostEvent](r)
-		err = cfg.DB.UserStore.AddHostEvent(cfg.Ctx, req.UserID, req.EventID)
+		_, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (any, error) {
+				return cfg.DB.UserStore.AddHostEvent(r.Context(), req.UserID, req.EventID)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrAddUserHostEvent, err), http.StatusInternalServerError)
 			return
@@ -232,7 +253,12 @@ func HandleRemoveUserHostEvent(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestRemoveUserHostEvent](r)
-		err = cfg.DB.UserStore.RemoveHostEvent(cfg.Ctx, req.UserID, req.EventID)
+		_, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (any, error) {
+				return cfg.DB.UserStore.RemoveHostEvent(r.Context(), req.UserID, req.EventID)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrRemoveUserHostEvent, err), http.StatusInternalServerError)
 			return

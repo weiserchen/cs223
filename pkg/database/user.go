@@ -14,10 +14,10 @@ type UserStore interface {
 	GetName(ctx context.Context, userID int64) (string, error)
 	GetHostEvents(ctx context.Context, userID int64) ([]int64, error)
 	CreateUser(ctx context.Context, userName string, hostEvents []int64) (int64, error)
-	DeleteUser(ctx context.Context, userID int64) error
-	UpdateName(ctx context.Context, userID int64, newName string) error
-	AddHostEvent(ctx context.Context, userID int64, eventID int64) error
-	RemoveHostEvent(ctx context.Context, userID int64, eventID int64) error
+	DeleteUser(ctx context.Context, userID int64) (any, error)
+	UpdateName(ctx context.Context, userID int64, newName string) (any, error)
+	AddHostEvent(ctx context.Context, userID int64, eventID int64) (any, error)
+	RemoveHostEvent(ctx context.Context, userID int64, eventID int64) (any, error)
 }
 
 type User struct {
@@ -26,7 +26,22 @@ type User struct {
 	HostEvents []int64 `json:"host_events"`
 }
 
+type UserStoreAPI int
+
+const (
+	UserStoreAPIGetUser UserStoreAPI = iota
+	UserStoreAPIGetID
+	UserStoreAPIGetName
+	UserStoreAPIGetHostEvents
+	UserStoreAPICreateUser
+	UserStoreAPIDeleteUser
+	UserStoreAPIUpdateName
+	UserStoreAPIAddHostEvent
+	UserStoreAPIRemoveHostEvent
+)
+
 type TableUser struct {
+	*TxTable[UserStoreAPI]
 	conn *pgxpool.Pool
 }
 
@@ -34,7 +49,8 @@ var _ UserStore = (*TableUser)(nil)
 
 func NewTableUser(conn *pgxpool.Pool) *TableUser {
 	return &TableUser{
-		conn: conn,
+		conn:    conn,
+		TxTable: NewTxTable[UserStoreAPI](conn),
 	}
 }
 
@@ -119,153 +135,168 @@ func (table *TableUser) GetHostEvents(ctx context.Context, userID int64) ([]int6
 	return hostEvents, nil
 }
 
-func (table *TableUser) CreateUser(ctx context.Context, userName string, hostEvents []int64) (int64, error) {
-	var userID int64
-
-	query := `
-		INSERT INTO Users (user_name, host_events)
-		VALUES ($1, $2)
-		RETURNING user_id;
-	`
-
-	if err := table.conn.QueryRow(
+func (table *TableUser) CreateUser(ctx context.Context, userName string, hostEvents []int64) (userID int64, err error) {
+	lifecycle := NewTxLifeCycle[UserStoreAPI, int64](table.TxTable)
+	return lifecycle.Start(
+		UserStoreAPICreateUser,
 		ctx,
-		query,
-		userName,
-		hostEvents,
-	).Scan(&userID); err != nil {
-		return -1, err
-	}
+		func(ctx context.Context, tx pgx.Tx) (int64, error) {
+			query := `
+				INSERT INTO Users (user_name, host_events)
+				VALUES ($1, $2)
+				RETURNING user_id;
+			`
 
-	return userID, nil
+			if err := tx.QueryRow(
+				ctx,
+				query,
+				userName,
+				hostEvents,
+			).Scan(&userID); err != nil {
+				return -1, err
+			}
+
+			return userID, nil
+		},
+	)
 }
 
-func (table *TableUser) DeleteUser(ctx context.Context, userID int64) error {
-	query := `
-		DELETE FROM Users
-		WHERE user_id = $1;
-	`
-
-	if _, err := table.conn.Exec(
+func (table *TableUser) DeleteUser(ctx context.Context, userID int64) (v any, err error) {
+	lifecycle := NewTxLifeCycle[UserStoreAPI, any](table.TxTable)
+	return lifecycle.Start(
+		UserStoreAPIDeleteUser,
 		ctx,
-		query,
-		userID,
-	); err != nil {
-		return err
-	}
+		func(ctx context.Context, tx pgx.Tx) (any, error) {
+			query := `
+				DELETE FROM Users
+				WHERE user_id = $1;
+			`
 
-	return nil
+			if _, err = tx.Exec(
+				ctx,
+				query,
+				userID,
+			); err != nil {
+				return nil, err
+			}
+
+			return nil, nil
+		},
+	)
 }
 
-func (table *TableUser) UpdateName(ctx context.Context, userID int64, newName string) error {
-	query := `
-		UPDATE Users
-		SET user_name = $2
-		WHERE user_id = $1;
-	`
-
-	if _, err := table.conn.Exec(
+func (table *TableUser) UpdateName(ctx context.Context, userID int64, newName string) (v any, err error) {
+	lifecycle := NewTxLifeCycle[UserStoreAPI, any](table.TxTable)
+	return lifecycle.Start(
+		UserStoreAPIUpdateName,
 		ctx,
-		query,
-		userID,
-		newName,
-	); err != nil {
-		return err
-	}
+		func(ctx context.Context, tx pgx.Tx) (any, error) {
+			query := `
+				UPDATE Users
+				SET user_name = $2
+				WHERE user_id = $1;
+			`
 
-	return nil
+			if _, err = tx.Exec(
+				ctx,
+				query,
+				userID,
+				newName,
+			); err != nil {
+				return nil, err
+			}
+
+			return nil, nil
+		},
+	)
 }
 
-func (table *TableUser) AddHostEvent(ctx context.Context, userID int64, eventID int64) (err error) {
-	var hostEvents []int64
-	var tx pgx.Tx
-
-	tx, commit, err := BeginTx(ctx, table.conn)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		err = commit(err)
-	}()
-
-	readQuery := `
-		SELECT host_events
-		FROM Users
-		WHERE user_id = $1;
-	`
-	if err = tx.QueryRow(
+func (table *TableUser) AddHostEvent(ctx context.Context, userID int64, eventID int64) (v any, err error) {
+	lifecycle := NewTxLifeCycle[UserStoreAPI, any](table.TxTable)
+	return lifecycle.Start(
+		UserStoreAPIAddHostEvent,
 		ctx,
-		readQuery,
-		userID,
-	).Scan(&hostEvents); err != nil {
-		return err
-	}
+		func(ctx context.Context, tx pgx.Tx) (any, error) {
+			var hostEvents []int64
 
-	if !slices.Contains(hostEvents, eventID) {
-		hostEvents = append(hostEvents, eventID)
-	}
+			readQuery := `
+				SELECT host_events
+				FROM Users
+				WHERE user_id = $1;
+			`
+			if err = tx.QueryRow(
+				ctx,
+				readQuery,
+				userID,
+			).Scan(&hostEvents); err != nil {
+				return nil, err
+			}
 
-	updateQuery := `
-		UPDATE Users
-		SET host_events = $2
-		WHERE user_id = $1;
-	`
+			if !slices.Contains(hostEvents, eventID) {
+				hostEvents = append(hostEvents, eventID)
+			}
 
-	if _, err := tx.Exec(
-		ctx,
-		updateQuery,
-		userID,
-		hostEvents,
-	); err != nil {
-		return err
-	}
+			updateQuery := `
+				UPDATE Users
+				SET host_events = $2
+				WHERE user_id = $1;
+			`
 
-	return nil
+			if _, err := tx.Exec(
+				ctx,
+				updateQuery,
+				userID,
+				hostEvents,
+			); err != nil {
+				return nil, err
+			}
+
+			return nil, nil
+		},
+	)
 }
 
-func (table *TableUser) RemoveHostEvent(ctx context.Context, userID int64, eventID int64) (err error) {
-	var hostEvents []int64
-	var tx pgx.Tx
-
-	tx, commit, err := BeginTx(ctx, table.conn)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		err = commit(err)
-	}()
-
-	readQuery := `
-		SELECT host_events
-		FROM Users
-		WHERE user_id = $1;
-	`
-	if err = tx.QueryRow(
+func (table *TableUser) RemoveHostEvent(ctx context.Context, userID int64, eventID int64) (v any, err error) {
+	lifecycle := NewTxLifeCycle[UserStoreAPI, any](table.TxTable)
+	return lifecycle.Start(
+		UserStoreAPIRemoveHostEvent,
 		ctx,
-		readQuery,
-		userID,
-	).Scan(&hostEvents); err != nil {
-		return err
-	}
+		func(ctx context.Context, tx pgx.Tx) (any, error) {
+			var hostEvents []int64
 
-	hostEvents = slices.DeleteFunc(hostEvents, func(id int64) bool {
-		return id == eventID
-	})
+			readQuery := `
+				SELECT host_events
+				FROM Users
+				WHERE user_id = $1;
+			`
+			if err = tx.QueryRow(
+				ctx,
+				readQuery,
+				userID,
+			).Scan(&hostEvents); err != nil {
+				return nil, err
+			}
 
-	updateQuery := `
-		UPDATE Users
-		SET host_events = $2
-		WHERE user_id = $1;
-	`
+			hostEvents = slices.DeleteFunc(hostEvents, func(id int64) bool {
+				return id == eventID
+			})
 
-	if _, err := tx.Exec(
-		ctx,
-		updateQuery,
-		userID,
-		hostEvents,
-	); err != nil {
-		return err
-	}
+			updateQuery := `
+				UPDATE Users
+				SET host_events = $2
+				WHERE user_id = $1;
+			`
 
-	return nil
+			if _, err := tx.Exec(
+				ctx,
+				updateQuery,
+				userID,
+				hostEvents,
+			); err != nil {
+				return nil, err
+			}
+
+			return nil, nil
+		},
+	)
 }

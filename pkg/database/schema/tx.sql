@@ -1,7 +1,7 @@
 
 -- local timestamp
 CREATE TABLE IF NOT EXISTS TxSenderClocks (
-  status_id BIGINT GENERATED ALWAYS AS IDENTITY,
+  clock_id BIGINT GENERATED ALWAYS AS IDENTITY,
   prt BIGINT NOT NULL,
   svc VARCHAR(20) NOT NULL,
   ts BIGINT NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS TxSenderClocks (
 );
 
 CREATE TABLE IF NOT EXISTS TxReceiverClocks (
-  status_id BIGINT GENERATED ALWAYS AS IDENTITY,
+  clock_id BIGINT GENERATED ALWAYS AS IDENTITY,
   prt BIGINT NOT NULL,
   svc VARCHAR(20) NOT NULL,
   ts BIGINT NOT NULL,
@@ -26,9 +26,9 @@ CREATE TABLE IF NOT EXISTS TxExecutor (
 -- result for all partitions
 CREATE TABLE IF NOT EXISTS TxResult (
   result_id BIGINT GENERATED ALWAYS AS IDENTITY,
-  svc VARCHAR(20) NOT NULL,
   prt BIGINT NOT NULL,
-  tx_id BIGINT NOT NULL,
-  content BYTEA,
-  UNIQUE (svc, prt, tx_id)
+  svc VARCHAR(20) NOT NULL,
+  ts BIGINT NOT NULL,
+  content JSONB,
+  UNIQUE (svc, prt, ts)
 );

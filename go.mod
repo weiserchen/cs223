@@ -7,6 +7,7 @@ require (
 	github.com/emirpasic/gods/v2 v2.0.0-alpha
 	github.com/gorilla/schema v1.4.1
 	github.com/jackc/pgx/v5 v5.7.1
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/stretchr/testify v1.9.0
 	github.com/testcontainers/testcontainers-go v0.34.0
 )

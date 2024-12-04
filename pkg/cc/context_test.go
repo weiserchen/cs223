@@ -1,73 +1,123 @@
 package cc
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestStageContext(t *testing.T) {
-	service := "service-a"
-	partition := uint64(3)
-	ts := uint64(100)
-	attrs := []string{"apple", "banana"}
-	stageCtx := NewTxStageContext(partition, service, ts, attrs)
+	stageCtx := &TxStageContext{
+		Partition: 3,
+		Service:   "service-a",
+		Timestamp: 100,
+		Attrs:     []string{"apple", "banana"},
+		DryRun:    true,
+	}
 
 	encodedStageCtx := stageCtx.Encode()
 	decodedStageCtx, err := DecodeTxStageContext(encodedStageCtx)
 	require.NoError(t, err)
-	require.Equal(t, stageCtx.Service, decodedStageCtx.Service)
-	require.Equal(t, stageCtx.Partition, decodedStageCtx.Partition)
-	require.Equal(t, stageCtx.Timestamp, decodedStageCtx.Timestamp)
-	require.Equal(t, stageCtx.Attrs, decodedStageCtx.Attrs)
+	checkTxStageCtx(t, stageCtx, decodedStageCtx)
 }
 
 func TestControlContext(t *testing.T) {
-	service := "service-a"
-	partition := uint64(3)
-	attrs := []string{"apple", "banana"}
-	ctrlCtx := NewTxControlContext(partition, service, attrs)
+	ctrlCtx := &TxControlContext{
+		Partition: 3,
+		Service:   "service-a",
+		Attrs:     []string{"apple", "banana"},
+		DryRun:    true,
+	}
 
 	encodedCtrlCtx := ctrlCtx.Encode()
 	decodedCtrlCtx, err := DecodeTxControlContext(encodedCtrlCtx)
 	require.NoError(t, err)
-	require.Equal(t, ctrlCtx.Service, decodedCtrlCtx.Service)
-	require.Equal(t, ctrlCtx.Partition, decodedCtrlCtx.Partition)
-	require.Equal(t, ctrlCtx.Attrs, decodedCtrlCtx.Attrs)
+	checkTxCtrlCtx(t, ctrlCtx, decodedCtrlCtx)
 }
 
 func TestExecutorContext(t *testing.T) {
-	service := "service-a"
-	partition := uint64(3)
-	attrs := []string{"apple", "banana"}
-	ctrlCtx := NewTxControlContext(partition, service, attrs)
+	ctrlCtx := &TxControlContext{
+		Partition: 3,
+		Service:   "service-a",
+		Attrs:     []string{"apple", "banana"},
+		DryRun:    true,
+	}
 
-	execID := uint64(200)
-	receivers := []string{"service-a", "service-b", "service-c"}
-	timestamps := []uint64{100, 135, 127}
-	req := "request"
-	result := 10
-	status := ExecStatusPending
+	type Input struct {
+		Value string
+	}
+	type Result struct {
+		Value int
+	}
 	execCtx := &TxExecutorContext{
-		ExecID:     execID,
+		ExecID:     200,
 		CtrlCtx:    ctrlCtx,
-		Receivers:  receivers,
-		Timestamps: timestamps,
-		Req:        req,
-		Result:     result,
-		Status:     status,
+		Receivers:  []string{"service-a", "service-b", "service-c"},
+		Timestamps: []uint64{100, 135, 127},
+		Input:      Input{"input"},
+		Result:     Result{10},
+		Status:     ExecStatusPending,
 		Curr:       1,
+		Method:     http.MethodPost,
+		Endpoint:   "127.0.0.1:8080",
 	}
 
 	encodedExecCtx := execCtx.Encode()
 	decodedExecCtx, err := DecodeTxExecutorContext(encodedExecCtx)
 	require.NoError(t, err)
-	require.Equal(t, execCtx.ExecID, decodedExecCtx.ExecID)
-	require.Equal(t, execCtx.CtrlCtx, decodedExecCtx.CtrlCtx)
-	require.Equal(t, execCtx.Receivers, decodedExecCtx.Receivers)
-	require.Equal(t, execCtx.Timestamps, decodedExecCtx.Timestamps)
-	require.EqualValues(t, execCtx.Req, decodedExecCtx.Req)
-	require.EqualValues(t, execCtx.Result, decodedExecCtx.Result)
-	require.Equal(t, execCtx.Status, decodedExecCtx.Status)
-	require.Equal(t, execCtx.Curr, decodedExecCtx.Curr)
+	checkTxExecCtx[Input, Result](t, execCtx, decodedExecCtx)
+}
+
+func checkTxStageCtx(t *testing.T, expected, got *TxStageContext) {
+	t.Helper()
+
+	require.NotNil(t, expected)
+	require.NotNil(t, got)
+	require.Equal(t, expected.Partition, got.Partition)
+	require.Equal(t, expected.Service, got.Service)
+	require.Equal(t, expected.Timestamp, got.Timestamp)
+	require.Equal(t, expected.Attrs, got.Attrs)
+	require.Equal(t, expected.DryRun, got.DryRun)
+}
+
+func checkTxCtrlCtx(t *testing.T, expected, got *TxControlContext) {
+	t.Helper()
+
+	require.NotNil(t, expected)
+	require.NotNil(t, got)
+	require.Equal(t, expected.Partition, got.Partition)
+	require.Equal(t, expected.Service, got.Service)
+	require.Equal(t, expected.Attrs, got.Attrs)
+	require.Equal(t, expected.DryRun, got.DryRun)
+}
+
+func checkTypeEqual[T any](t *testing.T, expected, got any) {
+	t.Helper()
+
+	expectedValue, err := UnmarshalInput[T](expected)
+	require.NoError(t, err)
+	gotValue, err := UnmarshalInput[T](got)
+	require.NoError(t, err)
+	require.EqualValues(t, expectedValue, gotValue)
+}
+
+func checkTxExecCtx[A, B any](t *testing.T, expected, got *TxExecutorContext) {
+	t.Helper()
+
+	require.NotNil(t, expected)
+	require.NotNil(t, got)
+
+	checkTxCtrlCtx(t, expected.CtrlCtx, got.CtrlCtx)
+	require.Equal(t, expected.ExecID, got.ExecID)
+	require.Equal(t, expected.Receivers, got.Receivers)
+	require.Equal(t, expected.Timestamps, got.Timestamps)
+	require.Equal(t, expected.Status, got.Status)
+
+	checkTypeEqual[A](t, expected.Input, got.Input)
+	checkTypeEqual[B](t, expected.Result, got.Result)
+
+	require.Equal(t, expected.Curr, got.Curr)
+	require.Equal(t, expected.Method, got.Method)
+	require.Equal(t, expected.Endpoint, got.Endpoint)
 }

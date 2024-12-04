@@ -1,13 +1,10 @@
 package cc
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
@@ -19,76 +16,38 @@ var (
 	ErrTxExecStageEmptyFunc = errors.New("empty exec stage func")
 )
 
-type CommitStageFunc = func(any) (any, any, error)
-type RetryFunc = func(int) time.Duration
-type StageFunc = func(any) (any, any, error)
-type RollbackFunc = func(any) (any, error)
-type CompleteFunc = func(any) (any, error)
-type CheckpointFunc = func(*TxExecutorContext) error
+type RetryFunc = func(retryTime int) time.Duration
+type StageFunc = func(input any) (result any, output any, err error)
+type RollbackFunc = func(input any) (output any, err error)
+type CompleteFunc = func(input any) (output any, err error)
 
-func constantRetry(duration time.Duration) RetryFunc {
+func ConstantRetry(i int) RetryFunc {
 	return func(retryTime int) time.Duration {
-		return time.Millisecond * duration
+		return time.Duration(i) * time.Millisecond
 	}
 }
 
-func DefaultCheckpointer(conn *pgxpool.Pool) CheckpointFunc {
-	return func(execCtx *TxExecutorContext) error {
-		return CheckpointExecutorContext(conn, execCtx)
+// start from 1 ms
+func ExponentialBackoffRetry(max time.Duration) RetryFunc {
+	return func(retryTime int) time.Duration {
+		waitPeriod := time.Duration(math.Pow(2, float64(retryTime-1))) * time.Millisecond
+		if waitPeriod > max {
+			waitPeriod = max
+		}
+		return waitPeriod
 	}
-}
-
-func GetTxExecutorCheckpoint(conn *pgxpool.Pool, execID uint64) (ExecStatus, *TxExecutorContext, error) {
-	query := `
-		SELECT status, checkpoint
-		FROM TxExecutor
-		WHERE exec_id = $1;
-	`
-
-	var status ExecStatus
-	var b []byte
-	var execCtx TxExecutorContext
-	ctx := context.Background()
-	row := conn.QueryRow(ctx, query, execID)
-	if err := row.Scan(&status, &b); err != nil {
-		return status, nil, err
-	}
-	if err := json.Unmarshal(b, &execCtx); err != nil {
-		return status, nil, err
-	}
-
-	return status, &execCtx, nil
 }
 
 type TxExecutorManager struct {
-	recvQueue   chan *TxExecutor
-	retryPeriod func(int) time.Duration
+	recvQueue chan *TxExecutor
+	retryFunc func(int) time.Duration
 }
 
-func NewTxExecutorManager() *TxExecutorManager {
+func NewTxExecutorManager(retryFunc RetryFunc) *TxExecutorManager {
 	return &TxExecutorManager{
-		recvQueue:   make(chan *TxExecutor),
-		retryPeriod: constantRetry(time.Second),
+		recvQueue: make(chan *TxExecutor),
+		retryFunc: retryFunc,
 	}
-}
-
-func CheckpointExecutorContext(conn *pgxpool.Pool, execCtx *TxExecutorContext) error {
-	b, err := json.Marshal(execCtx)
-	if err != nil {
-		return err
-	}
-
-	query := `
-		UPDATE SET
-			status = $2, 
-			checkpoint = $3
-		WHERE exec_id = $1;
-	`
-
-	ctx := context.Background()
-	execID := execCtx.ExecID
-	_, err = conn.Exec(ctx, query, execID, execCtx.Status, b)
-	return err
 }
 
 func (mgr *TxExecutorManager) Send(exec *TxExecutor) {
@@ -99,30 +58,50 @@ func (mgr *TxExecutorManager) Run() {
 	for exec := range mgr.recvQueue {
 		if exec.execCtx.Status == ExecStatusForceComplete {
 			go func() {
-				if err := exec.ForceComplete(); err != nil {
-					exec.retryTime += 1
-					time.Sleep(mgr.retryPeriod(exec.retryTime))
-					mgr.Send(exec)
+				for exec.Next() {
+					if err := exec.ForceComplete(); err != nil {
+						mgr.retry(exec)
+						return
+					}
+
+					if err := exec.Checkpoint(); err != nil {
+						mgr.retry(exec)
+						return
+					}
+					exec.retryTime = 0
+				}
+
+				exec.execCtx.Status = ExecStatusCompleted
+				if err := exec.Checkpoint(); err != nil {
+					mgr.retry(exec)
 				}
 			}()
 		} else {
 			go func() {
 				for exec.Next() {
-					if err := exec.Execute(); err != nil {
-						if errors.Is(ErrTxExecUnrecoverable, err) {
-							exec.execCtx.Status = ExecStatusForceComplete
-							err = exec.ForceComplete()
-						}
-						if err != nil {
-							mgr.retry(exec)
-						}
+					if exec.execCtx.Status == ExecStatusForceComplete {
+						// use another branch to handle
+						mgr.retry(exec)
 						return
+					} else {
+						if err := exec.Execute(); err != nil {
+							// normal case -> just retry
+							if !errors.Is(err, ErrTxExecUnrecoverable) {
+								mgr.retry(exec)
+								return
+							}
+							// unrecoverable -> force complete
+							exec.execCtx.Status = ExecStatusForceComplete
+						}
 					}
+
 					if err := exec.Checkpoint(); err != nil {
 						mgr.retry(exec)
+						return
 					}
 					exec.retryTime = 0
 				}
+
 				exec.execCtx.Status = ExecStatusCompleted
 				if err := exec.Checkpoint(); err != nil {
 					mgr.retry(exec)
@@ -134,7 +113,8 @@ func (mgr *TxExecutorManager) Run() {
 
 func (mgr *TxExecutorManager) retry(exec *TxExecutor) {
 	exec.retryTime += 1
-	time.Sleep(mgr.retryPeriod(exec.retryTime))
+	// log.Println(mgr.retryFunc(exec.retryTime))
+	time.Sleep(mgr.retryFunc(exec.retryTime))
 	mgr.Send(exec)
 }
 
@@ -179,40 +159,41 @@ func (exec *TxExecutor) Next() bool {
 
 func (exec *TxExecutor) Execute() error {
 	curr := exec.execCtx.Curr
-	req := exec.execCtx.Req
+	input := exec.execCtx.Input
 	stage := exec.stages[curr]
-	stage.Execute(req)
-	if stage.Error() != nil {
-		return stage.Error()
+	stage.Execute(input)
+	if stage.Err() != nil {
+		return stage.Err()
 	}
 
 	exec.execCtx.Curr += 1
-	exec.execCtx.Req = stage.output
+	exec.execCtx.Input = stage.output
 	return nil
 }
 
 func (exec *TxExecutor) Rollback() error {
 	exec.execCtx.Curr -= 1
 	curr := exec.execCtx.Curr
-	req := exec.execCtx.Req
+	input := exec.execCtx.Input
 	stage := exec.stages[curr]
-	stage.Rollback(req)
-	if stage.Error() != nil {
-		return stage.Error()
+	stage.Rollback(input)
+	if stage.Err() != nil {
+		return stage.Err()
 	}
 
-	exec.execCtx.Req = stage.output
+	exec.execCtx.Input = stage.output
 	return nil
 }
 
 func (exec *TxExecutor) ForceComplete() error {
 	curr := exec.execCtx.Curr
 	stage := exec.stages[curr]
-	stage.Complete(exec.execCtx.Req)
-	if stage.Error() != nil {
-		return fmt.Errorf("%w: %v", ErrTxExecForceComplete, stage.Error())
+	stage.Complete(exec.execCtx.Input)
+	if stage.Err() != nil {
+		return fmt.Errorf("%w: %v", ErrTxExecForceComplete, stage.Err())
 	}
 	exec.execCtx.Curr += 1
+	exec.execCtx.Input = stage.output
 	return nil
 }
 
@@ -225,15 +206,15 @@ func (exec *TxExecutor) Run() (any, error) {
 	case ExecStatusCommitted | ExecStatusCompleted:
 		return exec.execCtx.Result, nil
 	default:
-		req := exec.execCtx.Req
+		input := exec.execCtx.Input
 		commitStage := exec.commitStage
-		commitStage.Execute(req)
-		if commitStage.Error() != nil {
+		commitStage.Execute(input)
+		if commitStage.Err() != nil {
 			exec.execCtx.Status = ExecStatusAborted
-			return nil, fmt.Errorf("%w: %v", ErrTxExecAborted, commitStage.Error())
+			return nil, fmt.Errorf("%w: %v", ErrTxExecAborted, commitStage.Err())
 		}
 
-		exec.execCtx.Req = commitStage.output
+		exec.execCtx.Input = commitStage.output
 		exec.execCtx.Result = commitStage.result
 		exec.execCtx.Status = ExecStatusCommitted
 
@@ -285,8 +266,8 @@ func (stage *TxExecutorStage) Rollback(v any) {
 		stage.err = ErrTxExecStageEmptyFunc
 		return
 	}
-	result, err := stage.rollbackFunc(v)
-	stage.result = result
+	output, err := stage.rollbackFunc(v)
+	stage.output = output
 	stage.err = err
 }
 
@@ -295,8 +276,8 @@ func (stage *TxExecutorStage) Complete(v any) {
 		stage.err = ErrTxExecStageEmptyFunc
 		return
 	}
-	result, err := stage.completeFunc(v)
-	stage.result = result
+	output, err := stage.completeFunc(v)
+	stage.output = output
 	stage.err = err
 }
 
@@ -304,6 +285,6 @@ func (stage *TxExecutorStage) Result() any {
 	return stage.result
 }
 
-func (stage *TxExecutorStage) Error() error {
+func (stage *TxExecutorStage) Err() error {
 	return stage.err
 }

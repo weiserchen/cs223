@@ -1,91 +1,60 @@
 package cc
 
 import (
+	"context"
 	"errors"
+	"math/rand"
+	"net/http"
 	"testing"
+	"txchain/pkg/database"
 
-	"github.com/emirpasic/gods/v2/queues/arrayqueue"
-	"github.com/emirpasic/gods/v2/stacks/arraystack"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
 )
 
-func TestTxExecutorInMemory(t *testing.T) {
-	successStack := arraystack.New[int]()
-	pushStageFunc := func(i int) StageFunc {
-		return func(v any) (any, any, error) {
-			s := v.(*arraystack.Stack[int])
-			s.Push(i)
-			return i, s, nil
+func TestDBTxExecutor(t *testing.T) {
+	pgc, err := database.NewContainerTablesTx(t, "17.1")
+	defer func() {
+		if pgc != nil {
+			testcontainers.CleanupContainer(t, pgc.Container)
 		}
-	}
-	failureStageFunc := func(v any) (any, any, error) {
-		return v, v, errors.New("some error")
-	}
-	popRollbackFunc := func(v any) (any, error) {
-		s := v.(*arraystack.Stack[int])
-		s.Pop()
-		return s, nil
-	}
-	noopRollbackFunc := func(v any) (any, error) {
-		return v, nil
-	}
-	incCompleteFunc := func(v any) (any, error) {
-		i := v.(*int)
-		*i++
-		return nil, nil
-	}
-	noopCompleteFunc := func(v any) (any, error) {
-		return v, nil
-	}
-	queueCheckpointer := func(ckptQueue *arrayqueue.Queue[int], stack *arraystack.Stack[int]) CheckpointFunc {
-		return func(tec *TxExecutorContext) error {
-			v, _ := stack.Peek()
-			ckptQueue.Enqueue(v)
-			return nil
-		}
-	}
+	}()
+	require.NoError(t, err)
 
-	failureStage := NewExecutorStage()
-	failureStage.
-		Stage(failureStageFunc).
-		RollbackStage(noopRollbackFunc).
-		CompleteStage(noopCompleteFunc)
-
-	stage1 := NewExecutorStage()
-	stage1.
-		Stage(pushStageFunc(1)).
-		RollbackStage(popRollbackFunc).
-		CompleteStage(incCompleteFunc)
-
-	stage2 := NewExecutorStage()
-	stage2.
-		Stage(pushStageFunc(2)).
-		RollbackStage(popRollbackFunc).
-		CompleteStage(incCompleteFunc)
-
-	stage3 := NewExecutorStage()
-	stage3.
-		Stage(pushStageFunc(3)).
-		RollbackStage(popRollbackFunc).
-		CompleteStage(incCompleteFunc)
-
-	service := "service-a"
-	partition := uint64(3)
-	attrs := []string{"apple", "banana"}
-	ctrlCtx := NewTxControlContext(partition, service, attrs)
+	ctx := context.Background()
+	conn, err := pgxpool.New(ctx, pgc.Endpoint())
+	require.NoError(t, err)
 
 	// success stages
-	successExecCtx := &TxExecutorContext{
-		CtrlCtx: ctrlCtx,
-		Status:  ExecStatusPending,
-		Req:     successStack,
-		Curr:    0,
-	}
+	testSuccessfulExecutorStage(t, conn)
 
-	successQueue := arrayqueue.New[int]()
-	successCheckpointer := queueCheckpointer(successQueue, successStack)
+	// commit failure
+	testCommitFailureExecutorStage(t, conn)
 
-	successExecutor := NewTxExecutor(successExecCtx, successCheckpointer)
+	// rollback stage
+	testRollbackExecutorStage(t, conn)
+
+	// force complete stage
+	testForceCompleteExecutorStage(t, conn)
+}
+
+func testSuccessfulExecutorStage(
+	t *testing.T,
+	conn *pgxpool.Pool,
+) {
+	successExecCtx := defaultExecCtx()
+
+	err := InsertCheckpointExecutorContext(conn, successExecCtx)
+	require.NoError(t, err)
+
+	stages := defaultStages()
+	stage1 := stages[execStage1]
+	stage2 := stages[execStage2]
+	stage3 := stages[execStage3]
+	checkpointer := DefaultCheckpointer(conn)
+	successExecutor := NewTxExecutor(successExecCtx, checkpointer)
 	successExecutor.
 		CommitStage(stage1).
 		Stage(stage2).
@@ -95,44 +64,58 @@ func TestTxExecutorInMemory(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ExecStatusCommitted, successExecutor.execCtx.Status)
 
-	i, ok := v.(int)
+	r, ok := v.(Result)
 	require.True(t, ok)
-	require.Equal(t, 1, i)
+	require.EqualValues(t, Result{1}, r)
+
+	expectedInput := Input{
+		Value: []int{1},
+	}
+	require.EqualValues(t, expectedInput, successExecCtx.Input)
+
 	err = successExecutor.Checkpoint()
 	require.NoError(t, err)
-
-	require.Equal(t, []int{1}, successStack.Values())
-	require.Equal(t, []int{1}, successQueue.Values())
+	testCheckpoint(t, conn, successExecutor.execCtx, ExecStatusCommitted)
 
 	executeCount := 0
 	for successExecutor.Next() {
 		executeCount++
 		err = successExecutor.Execute()
 		require.NoError(t, err)
+
 		err = successExecutor.Checkpoint()
 		require.NoError(t, err)
+		testCheckpoint(t, conn, successExecutor.execCtx, ExecStatusCommitted)
 	}
 
 	require.Equal(t, 2, executeCount)
+	expectedInput = Input{
+		Value: []int{1, 2, 3},
+	}
+	require.EqualValues(t, expectedInput, successExecCtx.Input)
 
 	successExecutor.execCtx.Status = ExecStatusCompleted
 	err = successExecutor.Checkpoint()
 	require.NoError(t, err)
 
-	require.Equal(t, []int{3, 2, 1}, successStack.Values())
-	require.Equal(t, []int{1, 2, 3, 3}, successQueue.Values())
+	testCheckpoint(t, conn, successExecutor.execCtx, ExecStatusCompleted)
+}
 
-	// first stage failed
-	commitFailureStack := arraystack.New[int]()
-	commitFailureExecCtx := &TxExecutorContext{
-		CtrlCtx: ctrlCtx,
-		Status:  ExecStatusPending,
-		Req:     commitFailureStack,
-		Curr:    0,
-	}
-	commitFailureQueue := arrayqueue.New[int]()
-	commitFailureCheckpointer := queueCheckpointer(commitFailureQueue, commitFailureStack)
-	commitFailureExecutor := NewTxExecutor(commitFailureExecCtx, commitFailureCheckpointer)
+func testCommitFailureExecutorStage(
+	t *testing.T,
+	conn *pgxpool.Pool,
+) {
+	commitFailureExecCtx := defaultExecCtx()
+
+	err := InsertCheckpointExecutorContext(conn, commitFailureExecCtx)
+	require.NoError(t, err)
+
+	stages := defaultStages()
+	failureStage := stages[execStageFailure]
+	stage2 := stages[execStage2]
+	stage3 := stages[execStage3]
+	checkpointer := DefaultCheckpointer(conn)
+	commitFailureExecutor := NewTxExecutor(commitFailureExecCtx, checkpointer)
 	commitFailureExecutor.
 		CommitStage(failureStage).
 		Stage(stage2).
@@ -143,48 +126,63 @@ func TestTxExecutorInMemory(t *testing.T) {
 	require.True(t, errors.Is(ErrTxExecAborted, errors.Unwrap(err)), err)
 	require.Equal(t, ExecStatusAborted, commitFailureExecutor.execCtx.Status)
 
-	// rollback stage
-	rollbackStack := arraystack.New[int]()
-	rollbackExecCtx := &TxExecutorContext{
-		CtrlCtx: ctrlCtx,
-		Status:  ExecStatusPending,
-		Req:     rollbackStack,
-		Curr:    0,
-	}
-	rollbackQueue := arrayqueue.New[int]()
-	rollbackCheckpointer := queueCheckpointer(rollbackQueue, rollbackStack)
-	rollbackExecutor := NewTxExecutor(rollbackExecCtx, rollbackCheckpointer)
+	err = commitFailureExecutor.Checkpoint()
+	require.NoError(t, err)
+	testCheckpoint(t, conn, commitFailureExecutor.execCtx, ExecStatusAborted)
+}
+
+func testRollbackExecutorStage(
+	t *testing.T,
+	conn *pgxpool.Pool,
+) {
+	rollbackExecCtx := defaultExecCtx()
+
+	err := InsertCheckpointExecutorContext(conn, rollbackExecCtx)
+	require.NoError(t, err)
+
+	stages := defaultStages()
+	stage1 := stages[execStage1]
+	stage2 := stages[execStage2]
+	failureStage := stages[execStageFailure]
+	checkpointer := DefaultCheckpointer(conn)
+	rollbackExecutor := NewTxExecutor(rollbackExecCtx, checkpointer)
 	rollbackExecutor.
 		CommitStage(stage1).
 		Stage(stage2).
 		Stage(failureStage)
 
-	v, err = rollbackExecutor.Run()
+	v, err := rollbackExecutor.Run()
 	require.NoError(t, err)
 	require.Equal(t, ExecStatusCommitted, rollbackExecutor.execCtx.Status)
 
-	i, ok = v.(int)
+	r, ok := v.(Result)
 	require.True(t, ok)
-	require.Equal(t, 1, i)
-	err = rollbackExecutor.Checkpoint()
-	require.NoError(t, err)
+	require.EqualValues(t, Result{1}, r)
 
-	require.Equal(t, []int{1}, rollbackStack.Values())
-	require.Equal(t, []int{1}, rollbackQueue.Values())
+	expectedInput := Input{
+		Value: []int{1},
+	}
+	require.EqualValues(t, expectedInput, rollbackExecCtx.Input)
 
 	err = rollbackExecutor.Execute()
 	require.NoError(t, err)
+
 	err = rollbackExecutor.Checkpoint()
 	require.NoError(t, err)
+	testCheckpoint(t, conn, rollbackExecutor.execCtx, ExecStatusCommitted)
 
 	err = rollbackExecutor.Execute()
 	require.Error(t, err)
 	rollbackExecutor.execCtx.Status = ExecStatusRollback
+
+	expectedInput = Input{
+		Value: []int{1, 2},
+	}
+	require.EqualValues(t, expectedInput, rollbackExecutor.execCtx.Input)
+
 	err = rollbackExecutor.Checkpoint()
 	require.NoError(t, err)
-
-	require.Equal(t, []int{2, 1}, rollbackStack.Values())
-	require.Equal(t, []int{1, 2, 2}, rollbackQueue.Values())
+	testCheckpoint(t, conn, rollbackExecutor.execCtx, ExecStatusRollback)
 
 	rollbackCount := 0
 	for rollbackExecutor.Next() {
@@ -196,51 +194,61 @@ func TestTxExecutorInMemory(t *testing.T) {
 	}
 
 	require.Equal(t, 1, rollbackCount)
+	expectedInput = Input{
+		Value: []int{1},
+	}
+	require.EqualValues(t, expectedInput, rollbackExecutor.execCtx.Input)
+	testCheckpoint(t, conn, rollbackExecutor.execCtx, ExecStatusRollback)
 
 	rollbackExecutor.execCtx.Status = ExecStatusCompleted
 	err = rollbackExecutor.Checkpoint()
 	require.NoError(t, err)
+	testCheckpoint(t, conn, rollbackExecutor.execCtx, ExecStatusCompleted)
+}
 
-	require.Equal(t, []int{1}, rollbackStack.Values())
-	require.Equal(t, []int{1, 2, 2, 1, 1}, rollbackQueue.Values())
+func testForceCompleteExecutorStage(
+	t *testing.T,
+	conn *pgxpool.Pool,
+) {
+	completeExecCtx := defaultExecCtx()
 
-	// recover stage
-	completeStack := arraystack.New[int]()
-	completeExecCtx := &TxExecutorContext{
-		CtrlCtx: ctrlCtx,
-		Status:  ExecStatusPending,
-		Req:     completeStack,
-		Curr:    0,
-	}
-	completeQueue := arrayqueue.New[int]()
-	completeCheckpointer := queueCheckpointer(completeQueue, completeStack)
-	completeExecutor := NewTxExecutor(completeExecCtx, completeCheckpointer)
+	err := InsertCheckpointExecutorContext(conn, completeExecCtx)
+	require.NoError(t, err)
+
+	stages := defaultStages()
+	stage1 := stages[execStage1]
+	failureStage := stages[execStageFailure]
+	checkpointer := DefaultCheckpointer(conn)
+	completeExecutor := NewTxExecutor(completeExecCtx, checkpointer)
 	completeExecutor.
 		CommitStage(stage1).
 		Stage(failureStage).
 		Stage(failureStage)
 
-	v, err = completeExecutor.Run()
+	v, err := completeExecutor.Run()
 	require.NoError(t, err)
 	require.Equal(t, ExecStatusCommitted, completeExecutor.execCtx.Status)
 
-	i, ok = v.(int)
+	r, ok := v.(Result)
 	require.True(t, ok)
-	require.Equal(t, 1, i)
+	require.EqualValues(t, Result{1}, r)
+
+	expectedInput := Input{
+		Value: []int{1},
+	}
+	require.EqualValues(t, expectedInput, completeExecutor.execCtx.Input)
+
 	err = completeExecutor.Checkpoint()
 	require.NoError(t, err)
-
-	require.Equal(t, []int{1}, completeStack.Values())
-	require.Equal(t, []int{1}, completeQueue.Values())
+	testCheckpoint(t, conn, completeExecutor.execCtx, ExecStatusCommitted)
 
 	err = completeExecutor.Execute()
 	require.Error(t, err)
 	completeExecutor.execCtx.Status = ExecStatusForceComplete
+
 	err = completeExecutor.Checkpoint()
 	require.NoError(t, err)
-
-	require.Equal(t, []int{1}, completeStack.Values())
-	require.Equal(t, []int{1, 1}, completeQueue.Values())
+	testCheckpoint(t, conn, completeExecutor.execCtx, ExecStatusForceComplete)
 
 	completeCount := 0
 	for completeExecutor.Next() {
@@ -252,15 +260,189 @@ func TestTxExecutorInMemory(t *testing.T) {
 	}
 
 	require.Equal(t, 2, completeCount)
+	expectedInput = Input{
+		Value: []int{1, 0, 0},
+	}
+	require.EqualValues(t, expectedInput, completeExecutor.execCtx.Input)
+	testCheckpoint(t, conn, completeExecutor.execCtx, ExecStatusForceComplete)
 
 	completeExecutor.execCtx.Status = ExecStatusCompleted
 	err = completeExecutor.Checkpoint()
 	require.NoError(t, err)
-
-	require.Equal(t, []int{1}, completeStack.Values())
-	require.Equal(t, []int{1, 1, 1, 1, 1}, completeQueue.Values())
+	testCheckpoint(t, conn, completeExecutor.execCtx, ExecStatusCompleted)
 }
 
-func TestTxExecutorInDB(t *testing.T) {
+func testCheckpoint(
+	t *testing.T,
+	conn *pgxpool.Pool,
+	execCtx *TxExecutorContext,
+	expectedStatus ExecStatus,
+) {
+	checkpointRetriever := DefaultCheckpointRetriever(conn)
+	ckptStatus, ckptExecCtx, err := checkpointRetriever(execCtx.ExecID)
+	require.NoError(t, err)
+	require.Equal(t, expectedStatus, ckptStatus)
+	if expectedStatus != ExecStatusAborted {
+		checkTxExecCtx[Input, Result](t, execCtx, ckptExecCtx)
+	}
+}
 
+type Input struct {
+	Value []int
+}
+type Result struct {
+	Value int
+}
+
+func pushStageFunc(i int) StageFunc {
+	return func(v any) (any, any, error) {
+		s := v.(Input)
+		s.Value = append(s.Value, i)
+		r := Result{i}
+		return r, s, nil
+	}
+}
+
+func failureStageFunc(v any) (any, any, error) {
+	return v, v, errors.New("some error")
+}
+
+func unrecoverableFailureStageFunc(v any) (any, any, error) {
+	return v, v, ErrTxExecUnrecoverable
+}
+
+func popRollbackFunc(v any) (any, error) {
+	s := v.(Input)
+	s.Value = s.Value[:len(s.Value)-1]
+	return s, nil
+}
+
+func forceCompleteFunc(v any) (any, error) {
+	s := v.(Input)
+	s.Value = append(s.Value, 0)
+	return s, nil
+}
+
+func flakyStageFunc(i int) StageFunc {
+	return func(v any) (any, any, error) {
+		n := rand.Int63n(10000)
+		if n < 6000 {
+			return nil, nil, errors.New("flaky error")
+		}
+		s := v.(Input)
+		s.Value = append(s.Value, i)
+		r := Result{i}
+		return r, s, nil
+	}
+}
+
+func flakyCompleteFunc(v any) (any, error) {
+	n := rand.Int63n(10000)
+	if n < 6000 {
+		return nil, errors.New("flaky error")
+	}
+	s := v.(Input)
+	s.Value = append(s.Value, 0)
+	return s, nil
+}
+
+func defaultExecCtx() *TxExecutorContext {
+	ctrlCtx := &TxControlContext{
+		Partition: 3,
+		Service:   "service-a",
+		Attrs:     []string{"apple", "banana"},
+	}
+
+	return &TxExecutorContext{
+		CtrlCtx:  ctrlCtx,
+		Status:   ExecStatusPending,
+		Input:    Input{},
+		Curr:     0,
+		Method:   http.MethodPost,
+		Endpoint: "127.0.0.1:8080",
+	}
+}
+
+type execStage int
+
+const (
+	execStage1 execStage = iota
+	execStage2
+	execStage3
+	execStageFailure
+	execStageUnrecoverableFailure
+	execStage1Flaky
+	execStage2Flaky
+	execStage3Flaky
+	execStageFailureFlaky
+)
+
+func defaultStages() map[execStage]*TxExecutorStage {
+	stages := map[execStage]*TxExecutorStage{}
+
+	stage1 := NewExecutorStage()
+	stage1.
+		Stage(pushStageFunc(1)).
+		RollbackStage(popRollbackFunc).
+		CompleteStage(forceCompleteFunc)
+
+	stage2 := NewExecutorStage()
+	stage2.
+		Stage(pushStageFunc(2)).
+		RollbackStage(popRollbackFunc).
+		CompleteStage(forceCompleteFunc)
+
+	stage3 := NewExecutorStage()
+	stage3.
+		Stage(pushStageFunc(3)).
+		RollbackStage(popRollbackFunc).
+		CompleteStage(forceCompleteFunc)
+
+	failureStage := NewExecutorStage()
+	failureStage.
+		Stage(failureStageFunc).
+		RollbackStage(popRollbackFunc).
+		CompleteStage(forceCompleteFunc)
+
+	unrecoverableFailureStage := NewExecutorStage()
+	unrecoverableFailureStage.
+		Stage(unrecoverableFailureStageFunc).
+		RollbackStage(popRollbackFunc).
+		CompleteStage(forceCompleteFunc)
+
+	flakyStage1 := NewExecutorStage()
+	flakyStage1.
+		Stage(flakyStageFunc(1)).
+		RollbackStage(popRollbackFunc).
+		CompleteStage(forceCompleteFunc)
+
+	flakyStage2 := NewExecutorStage()
+	flakyStage2.
+		Stage(flakyStageFunc(2)).
+		RollbackStage(popRollbackFunc).
+		CompleteStage(forceCompleteFunc)
+
+	flakyStage3 := NewExecutorStage()
+	flakyStage3.
+		Stage(flakyStageFunc(3)).
+		RollbackStage(popRollbackFunc).
+		CompleteStage(flakyCompleteFunc)
+
+	flakyFailureStage := NewExecutorStage()
+	flakyFailureStage.
+		Stage(unrecoverableFailureStageFunc).
+		RollbackStage(popRollbackFunc).
+		CompleteStage(flakyCompleteFunc)
+
+	stages[execStage1] = stage1
+	stages[execStage2] = stage2
+	stages[execStage3] = stage3
+	stages[execStageFailure] = failureStage
+	stages[execStageUnrecoverableFailure] = unrecoverableFailureStage
+	stages[execStage1Flaky] = flakyStage1
+	stages[execStage2Flaky] = flakyStage2
+	stages[execStage3Flaky] = flakyStage3
+	stages[execStageFailureFlaky] = flakyFailureStage
+
+	return stages
 }

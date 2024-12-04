@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"time"
 	"txchain/pkg/database"
@@ -57,12 +58,17 @@ func HandleCreateEventLog(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestCreateEventLog](r)
-		logID, err = cfg.DB.EventLogStore.CreateEventLog(
-			cfg.Ctx,
-			req.EventID,
-			req.UserID,
-			database.EventType(req.EventType),
-			APIEventToDatabaseEvent(req.Event),
+		logID, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (int64, error) {
+				return cfg.DB.EventLogStore.CreateEventLog(
+					ctx,
+					req.EventID,
+					req.UserID,
+					database.EventType(req.EventType),
+					APIEventToDatabaseEvent(req.Event),
+				)
+			},
 		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrCreateEventLog, err), http.StatusInternalServerError)
@@ -90,7 +96,7 @@ func HandleGetEventLogs(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestGetEventLogs](r)
-		dbEventLogs, err = cfg.DB.EventLogStore.GetEventLogs(cfg.Ctx, req.EventID)
+		dbEventLogs, err = cfg.DB.EventLogStore.GetEventLogs(r.Context(), req.EventID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetEventLogs, err), http.StatusInternalServerError)
 			return

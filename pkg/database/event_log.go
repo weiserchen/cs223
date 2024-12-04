@@ -38,15 +38,24 @@ type EventLog struct {
 	UpdatedAt time.Time `json:"updated_at"` // updated by database
 }
 
+type EventLogStoreAPI int
+
+const (
+	EventLogStoreAPIGetEventLogs EventLogStoreAPI = iota
+	EventLogStoreAPICreateEventLog
+)
+
 var _ EventLogStore = (*TableEventLog)(nil)
 
 type TableEventLog struct {
+	*TxTable[EventLogStoreAPI]
 	conn *pgxpool.Pool
 }
 
 func NewTableEventLog(conn *pgxpool.Pool) *TableEventLog {
 	return &TableEventLog{
-		conn: conn,
+		conn:    conn,
+		TxTable: NewTxTable[EventLogStoreAPI](conn),
 	}
 }
 
@@ -56,48 +65,54 @@ func (table *TableEventLog) CreateEventLog(
 	userID int64,
 	eventType EventType,
 	event *Event,
-) (int64, error) {
-	var logID int64
-	var err error
-	var content string
+) (logID int64, err error) {
 
-	switch eventType {
-	case EventCreate:
-		content = GenLogCreateEvent(event)
-	case EventUpdate:
-		content = GenLogUpdateEvent(event)
-	case EventDelete:
-		content = GenLogDeleteEvent(eventID)
-	case EventJoin:
-		content = GenLogJoinEvent(eventID, userID)
-	case EventLeave:
-		content = GenLogLeaveEvent(eventID, userID)
-	default:
-		return -1, fmt.Errorf("%w: %v", ErrUnknownEventType, eventType)
-	}
-
-	query := `
-		INSERT INTO EventLogs (
-			event_id, 
-			user_id,
-			event_type,
-			content
-		)
-		VALUES ($1, $2, $3, $4)
-		RETURNING log_id;
-	`
-	if err = table.conn.QueryRow(
+	lifecycle := NewTxLifeCycle[EventLogStoreAPI, int64](table.TxTable)
+	return lifecycle.Start(
+		EventLogStoreAPIGetEventLogs,
 		ctx,
-		query,
-		eventID,
-		userID,
-		eventType,
-		content,
-	).Scan(&logID); err != nil {
-		return -1, err
-	}
+		func(ctx context.Context, tx pgx.Tx) (int64, error) {
+			var content string
 
-	return logID, nil
+			switch eventType {
+			case EventCreate:
+				content = GenLogCreateEvent(event)
+			case EventUpdate:
+				content = GenLogUpdateEvent(event)
+			case EventDelete:
+				content = GenLogDeleteEvent(eventID)
+			case EventJoin:
+				content = GenLogJoinEvent(eventID, userID)
+			case EventLeave:
+				content = GenLogLeaveEvent(eventID, userID)
+			default:
+				return -1, fmt.Errorf("%w: %v", ErrUnknownEventType, eventType)
+			}
+
+			query := `
+				INSERT INTO EventLogs (
+					event_id, 
+					user_id,
+					event_type,
+					content
+				)
+				VALUES ($1, $2, $3, $4)
+				RETURNING log_id;
+			`
+			if err = tx.QueryRow(
+				ctx,
+				query,
+				eventID,
+				userID,
+				eventType,
+				content,
+			).Scan(&logID); err != nil {
+				return -1, err
+			}
+
+			return logID, nil
+		},
+	)
 }
 
 func (table *TableEventLog) GetEventLogs(

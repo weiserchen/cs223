@@ -144,9 +144,10 @@ func NewPostgresContainer(
 	return pgc, nil
 }
 
-func NewContainerTable(
+func NewContainerTables(
 	t *testing.T,
-	version, table, script string,
+	version, script string,
+	tables []string,
 	options ...TableOption,
 ) (pgc *PgContainer, err error) {
 	var option TableOption
@@ -191,24 +192,26 @@ func NewContainerTable(
 		return nil, err
 	}
 
-	tableExistsQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s;`, table)
+	for _, table := range tables {
+		tableExistsQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s;`, table)
 
-	var dummy int
-	err = conn.QueryRow(ctx, tableExistsQuery).Scan(&dummy)
-	if err != nil || dummy != 0 {
-		tctr.CleanupContainer(t, pgc.Container)
-		return nil, err
+		var dummy int
+		err = conn.QueryRow(ctx, tableExistsQuery).Scan(&dummy)
+		if err != nil || dummy != 0 {
+			tctr.CleanupContainer(t, pgc.Container)
+			return nil, err
+		}
 	}
 
 	return pgc, nil
 }
 
 func NewContainerTableUsers(t *testing.T, version string) (*PgContainer, error) {
-	return NewContainerTable(
+	return NewContainerTables(
 		t,
 		version,
-		"Users",
 		"schema/users.sql",
+		[]string{"Users"},
 		TableOption{
 			FS: &schema,
 		},
@@ -216,11 +219,11 @@ func NewContainerTableUsers(t *testing.T, version string) (*PgContainer, error) 
 }
 
 func NewContainerTableEvents(t *testing.T, version string) (*PgContainer, error) {
-	return NewContainerTable(
+	return NewContainerTables(
 		t,
 		version,
-		"Events",
 		"schema/events.sql",
+		[]string{"Events"},
 		TableOption{
 			FS: &schema,
 		},
@@ -228,11 +231,23 @@ func NewContainerTableEvents(t *testing.T, version string) (*PgContainer, error)
 }
 
 func NewContainerTableEventLogs(t *testing.T, version string) (*PgContainer, error) {
-	return NewContainerTable(
+	return NewContainerTables(
 		t,
 		version,
-		"EventLogs",
 		"schema/event_logs.sql",
+		[]string{"EventLogs"},
+		TableOption{
+			FS: &schema,
+		},
+	)
+}
+
+func NewContainerTablesTx(t *testing.T, version string) (*PgContainer, error) {
+	return NewContainerTables(
+		t,
+		version,
+		"schema/tx.sql",
+		[]string{"TxSenderClocks", "TxReceiverClocks", "TxExecutor", "TxResult"},
 		TableOption{
 			FS: &schema,
 		},

@@ -19,6 +19,14 @@ var (
 	ErrMiddlewareTxMiddsingCtrlCtx = errors.New("missing control context")
 )
 
+func TxTraceContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		traceCtx := format.NewTraceContext()
+		ctx := format.SetTraceContext(r.Context(), traceCtx)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func TxStageContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		encoded := r.Header.Get(headerTxStageContext)

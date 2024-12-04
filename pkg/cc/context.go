@@ -1,9 +1,12 @@
 package cc
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 var (
@@ -12,20 +15,53 @@ var (
 	ErrTxExecutorContextDecode = errors.New("failed to decode tx executor context")
 )
 
+type contextKeyTxCtx int
+
+const (
+	contextKeyTxStageCtx contextKeyTxCtx = iota
+	contextKeyTxCtrlCtx
+	contextKeyTxExecCtx
+)
+
+func GetTxStageCtx(ctx context.Context) (*TxStageContext, bool) {
+	stageCtx, ok := ctx.Value(contextKeyTxStageCtx).(*TxStageContext)
+	return stageCtx, ok
+}
+
+func SetTxStageCtx(ctx context.Context, stageCtx *TxStageContext) context.Context {
+	return context.WithValue(ctx, contextKeyTxStageCtx, stageCtx)
+}
+
+func GetTxCtrlCtx(ctx context.Context) (*TxControlContext, bool) {
+	ctrlCtx, ok := ctx.Value(contextKeyTxCtrlCtx).(*TxControlContext)
+	return ctrlCtx, ok
+}
+
+func SetTxCtrlCtx(ctx context.Context, ctrlCtx *TxControlContext) context.Context {
+	return context.WithValue(ctx, contextKeyTxCtrlCtx, ctrlCtx)
+}
+
+func GetTxExecCtx(ctx context.Context) (*TxExecutorContext, bool) {
+	execCtx, ok := ctx.Value(contextKeyTxExecCtx).(*TxExecutorContext)
+	return execCtx, ok
+}
+
+func SetTxExecCtx(ctx context.Context, execCtx *TxExecutorContext) context.Context {
+	return context.WithValue(ctx, contextKeyTxExecCtx, execCtx)
+}
+
+func UnmarshalInput[T any](v any) (T, error) {
+	var input T
+	err := mapstructure.Decode(v, &input)
+	return input, err
+}
+
 type TxStageContext struct {
 	Partition uint64   `json:"partition"`
 	Service   string   `json:"service"`
 	Timestamp uint64   `json:"timestamp"`
 	Attrs     []string `json:"attrs"`
-}
-
-func NewTxStageContext(partition uint64, service string, timestamp uint64, attrs []string) *TxStageContext {
-	return &TxStageContext{
-		Partition: partition,
-		Service:   service,
-		Timestamp: timestamp,
-		Attrs:     attrs,
-	}
+	DryRun    bool     `json:"dry_run"`
 }
 
 func DecodeTxStageContext(encoded string) (*TxStageContext, error) {
@@ -51,14 +87,7 @@ type TxControlContext struct {
 	Partition uint64   `json:"partition"`
 	Service   string   `json:"service"`
 	Attrs     []string `json:"attrs"`
-}
-
-func NewTxControlContext(partition uint64, service string, attrs []string) *TxControlContext {
-	return &TxControlContext{
-		Service:   service,
-		Partition: partition,
-		Attrs:     attrs,
-	}
+	DryRun    bool     `json:"dry_run"`
 }
 
 func DecodeTxControlContext(encoded string) (*TxControlContext, error) {
@@ -83,23 +112,25 @@ func (ctrlCtx *TxControlContext) Encode() string {
 type ExecStatus int
 
 const (
-	ExecStatusPending       ExecStatus = 0
-	ExecStatusCommitted     ExecStatus = 1
-	ExecStatusAborted       ExecStatus = 2
-	ExecStatusRollback      ExecStatus = 3
-	ExecStatusForceComplete ExecStatus = 4
-	ExecStatusCompleted     ExecStatus = 5
+	ExecStatusPending ExecStatus = iota
+	ExecStatusCommitted
+	ExecStatusAborted
+	ExecStatusRollback
+	ExecStatusForceComplete
+	ExecStatusCompleted
 )
 
 type TxExecutorContext struct {
-	ExecID     uint64            `json:"exec_id"`
-	CtrlCtx    *TxControlContext `json:"ctrl_ctx"`
-	Receivers  []string          `json:"receivers"`
-	Timestamps []uint64          `json:"timestamps"`
-	Req        any               `json:"req"`
-	Result     any               `json:"result"`
-	Status     ExecStatus        `json:"status"`
-	Curr       int               `json:"curr"`
+	ExecID     uint64
+	CtrlCtx    *TxControlContext
+	Receivers  []string
+	Timestamps []uint64
+	Input      any
+	Result     any
+	Status     ExecStatus
+	Curr       int
+	Method     string
+	Endpoint   string
 }
 
 func DecodeTxExecutorContext(encoded string) (*TxExecutorContext, error) {

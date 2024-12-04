@@ -1,7 +1,7 @@
 package cc
 
 import (
-	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -14,6 +14,7 @@ type TxManager struct {
 	FilterMgr        *TxFilterManager
 	OriginMgr        *TxOriginManager
 	ExecMgr          *TxExecutorManager
+	RecoveryMgr      *TxRecoveryManager
 	conn             *pgxpool.Pool
 }
 
@@ -24,7 +25,8 @@ func NewTxManager(conn *pgxpool.Pool, partitions uint64, services []string) *TxM
 	senderPrtMgr := NewTxPartitionManager(partitions)
 	receiverPrtMgr := NewTxPartitionManager(partitions)
 	originMgr := NewTxOriginManager(partitions, receiverClockMgr, receiverPrtMgr)
-	execMgr := NewTxExecutorManager()
+	execMgr := NewTxExecutorManager(ExponentialBackoffRetry(time.Second))
+	recoveryMgr := NewTxRecoveryManager(conn, senderClockMgr, receiverClockMgr, execMgr)
 	for _, service := range services {
 		filterMgr.Init(service)
 		originMgr.Init(service)
@@ -37,59 +39,12 @@ func NewTxManager(conn *pgxpool.Pool, partitions uint64, services []string) *TxM
 		FilterMgr:        filterMgr,
 		OriginMgr:        originMgr,
 		ExecMgr:          execMgr,
+		RecoveryMgr:      recoveryMgr,
+		conn:             conn,
 	}
 }
 
-func (mgr *TxManager) Recover() error {
-	ctx := context.Background()
-
-	senderClockQuery := `
-		SELECT prt, svc, ts
-		FROM TxSenderClocks;
-	`
-
-	rows, err := mgr.conn.Query(ctx, senderClockQuery)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var partition, timestamp uint64
-		var service string
-		if err = rows.Scan(&partition, &service, &timestamp); err != nil {
-			return err
-		}
-		mgr.SenderClockMgr.Set(partition, service, timestamp)
-	}
-
-	receiverClockQuery := `
-		SELECT prt, svc, ts
-		FROM TxReceiverClocks;
-	`
-
-	rows, err = mgr.conn.Query(ctx, receiverClockQuery)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var partition, timestamp uint64
-		var service string
-		if err = rows.Scan(&partition, &service, &timestamp); err != nil {
-			return err
-		}
-		mgr.ReceiverClockMgr.Set(partition, service, timestamp)
-	}
-
-	// executorQuery := `
-	//
-	// `
-
-	// resultQuery := `
-	//
-	// `
-
-	return nil
+func (mgr *TxManager) Run() error {
+	err := mgr.RecoveryMgr.Recover()
+	return err
 }

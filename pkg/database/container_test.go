@@ -126,23 +126,28 @@ func TestDistributedSchemaCreation(t *testing.T) {
 
 	testcases := []struct {
 		name   string
-		table  string
 		script string
+		tables []string
 	}{
 		{
 			name:   "Users Table",
-			table:  "Users",
 			script: "schema/users.sql",
+			tables: []string{"Users"},
 		},
 		{
 			name:   "Events Table",
-			table:  "Events",
 			script: "schema/events.sql",
+			tables: []string{"Events"},
 		},
 		{
 			name:   "EventLogs Table",
-			table:  "EventLogs",
 			script: "schema/event_logs.sql",
+			tables: []string{"EventLogs"},
+		},
+		{
+			name:   "Tx Tables",
+			script: "schema/tx.sql",
+			tables: []string{"TxSenderClocks", "TxReceiverClocks", "TxExecutor", "TxResult"},
 		},
 	}
 
@@ -153,7 +158,7 @@ func TestDistributedSchemaCreation(t *testing.T) {
 			var err error
 			var pgc *PgContainer
 
-			pgc, err = NewContainerTable(t, "17.1", tc.table, tc.script)
+			pgc, err = NewContainerTables(t, "17.1", tc.script, tc.tables)
 			defer func() {
 				if pgc != nil {
 					tctr.CleanupContainer(t, pgc.Container)

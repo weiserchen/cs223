@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"time"
 	"txchain/pkg/database"
@@ -63,7 +64,7 @@ func HandleGetEvent(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestGetEvent](r)
-		dbEvent, err = cfg.DB.EventStore.GetEvent(cfg.Ctx, req.EventID)
+		dbEvent, err = cfg.DB.EventStore.GetEvent(r.Context(), req.EventID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetEvent, err), http.StatusInternalServerError)
 			return
@@ -92,7 +93,12 @@ func HandleCreateEvent(cfg *router.Config) http.Handler {
 
 		req := middleware.MarshalRequest[RequestCreateEvent](r)
 		dbEvent = APIEventToDatabaseEvent(req.Event)
-		eventID, err = cfg.DB.EventStore.CreateEvent(cfg.Ctx, dbEvent)
+		eventID, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (int64, error) {
+				return cfg.DB.EventStore.CreateEvent(ctx, dbEvent)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrCreateEvent, err), http.StatusInternalServerError)
 			return
@@ -119,7 +125,12 @@ func HandleUpdateEvent(cfg *router.Config) http.Handler {
 
 		req := middleware.MarshalRequest[RequestUpdateEvent](r)
 		dbEvent = APIEventToDatabaseEvent(req.Event)
-		err = cfg.DB.EventStore.UpdateEvent(cfg.Ctx, dbEvent)
+		_, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (any, error) {
+				return cfg.DB.EventStore.UpdateEvent(ctx, dbEvent)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrUpdateEvent, err), http.StatusInternalServerError)
 			return
@@ -142,7 +153,12 @@ func HandleDeleteEvent(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestDeleteEvent](r)
-		err = cfg.DB.EventStore.DeleteEvent(cfg.Ctx, req.EventID)
+		_, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (any, error) {
+				return cfg.DB.EventStore.DeleteEvent(ctx, req.EventID)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrDeleteEvent, err), http.StatusInternalServerError)
 			return
@@ -166,7 +182,12 @@ func HandleAddEventParticipant(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestAddEventParticipant](r)
-		err = cfg.DB.EventStore.AddParticipant(cfg.Ctx, req.EventID, req.ParticipantID)
+		_, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (any, error) {
+				return cfg.DB.EventStore.AddParticipant(ctx, req.EventID, req.ParticipantID)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrAddEventParticipant, err), http.StatusInternalServerError)
 			return
@@ -190,7 +211,12 @@ func HandleRemoveEventParticipant(cfg *router.Config) http.Handler {
 		var err error
 
 		req := middleware.MarshalRequest[RequestRemoveEventParticipant](r)
-		err = cfg.DB.EventStore.RemoveParticipant(cfg.Ctx, req.EventID, req.ParticipantID)
+		_, err = database.UnwrapResult(
+			r.Context(),
+			func(ctx context.Context) (any, error) {
+				return cfg.DB.EventStore.RemoveParticipant(ctx, req.EventID, req.ParticipantID)
+			},
+		)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrRemoveEventParticipant, err), http.StatusInternalServerError)
 			return
