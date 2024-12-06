@@ -21,7 +21,7 @@ type ResponseTestTxUpdateFilter struct {
 
 func HandleTestTxUpdateFilter(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		req := middleware.MarshalRequest[RequestTestTxUpdateFilter](r)
+		req := middleware.UnmarshalRequest[RequestTestTxUpdateFilter](r)
 		filterMgr := cfg.TxMgr.FilterMgr
 		switch req.FilterType {
 		case cc.TxFilterTypeRequest:
@@ -68,7 +68,7 @@ type ResponseTxAdvanceTimestamp struct {
 
 func HandleTxAdvanceTimestamp(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		req := middleware.MarshalRequest[RequestTxAdvanceTimestamp](r)
+		req := middleware.UnmarshalRequest[RequestTxAdvanceTimestamp](r)
 		originMgr := cfg.TxMgr.OriginMgr
 
 		partition, service, timestamp := req.Partition, req.Service, req.Timestamp

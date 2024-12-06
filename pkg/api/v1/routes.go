@@ -9,6 +9,7 @@ func NewUserRoutes(cfg *router.Config) []router.Route {
 	r := router.New(cfg)
 
 	apiV1 := r.Prefix("/api/v1")
+	apiV1.Apply(middleware.TxParticipant(cfg.TxMgr, cfg.Logger, "user"))
 	{
 		user := apiV1.Prefix("/user")
 		{
@@ -50,6 +51,7 @@ func NewEventRoutes(cfg *router.Config) []router.Route {
 	r := router.New(cfg)
 
 	apiV1 := r.Prefix("/api/v1")
+	apiV1.Apply(middleware.TxParticipant(cfg.TxMgr, cfg.Logger, "event"))
 	{
 		event := apiV1.Prefix("/event")
 		{
@@ -82,6 +84,7 @@ func NewEventLogRoutes(cfg *router.Config) []router.Route {
 	r := router.New(cfg)
 
 	apiV1 := r.Prefix("/api/v1")
+	apiV1.Apply(middleware.TxParticipant(cfg.TxMgr, cfg.Logger, "event_log"))
 	{
 		apiV1.Get("/event_logs", HandleGetEventLogs(cfg)).Apply(middleware.ValidateQuery[RequestGetEventLogs])
 		apiV1.Post("/event_log", HandleCreateEventLog(cfg)).Apply(middleware.ValidateBody[RequestCreateEventLog])

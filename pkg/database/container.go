@@ -45,11 +45,36 @@ var (
 	RuntimePodman Runtime = "podman"
 )
 
-var (
+const (
 	testDB         = "test"
 	testDBUser     = "postgres"
 	testDBPassword = "postgres"
 	testDBData     = "/data/postgres"
+
+	tableUser             = "Users"
+	tableEvent            = "Events"
+	tableEventLog         = "EventLogs"
+	tableTxResult         = "TxResult"
+	tableTxExecutor       = "TxExecutor"
+	tableTxSenderClocks   = "TxSenderClocks"
+	tableTxReceiverClocks = "TxReceiverClocks"
+
+	scriptUser     = "schema/users.sql"
+	scriptEvent    = "schema/events.sql"
+	scriptEventLog = "schema/event_logs.sql"
+	scriptTx       = "schema/tx.sql"
+)
+
+var (
+	txTables       = []string{tableTxResult, tableTxExecutor, tableTxSenderClocks, tableTxReceiverClocks}
+	userTables     = append(txTables, tableUser)
+	eventTables    = append(txTables, tableEvent)
+	eventLogTables = append(txTables, tableEventLog)
+
+	txScripts       = []string{scriptTx}
+	userScripts     = append(txScripts, scriptUser)
+	eventScripts    = append(txScripts, scriptEvent)
+	eventLogScripts = append(txScripts, scriptEventLog)
 )
 
 type TableOption struct {
@@ -114,9 +139,10 @@ func NewPostgresContainer(
 		Started: true,
 	}
 
+	pgc = &PgContainer{}
 	container, err := tctr.GenericContainer(ctx, req)
 	if err != nil {
-		return nil, err
+		return pgc, err
 	}
 	defer func() {
 		if err != nil {
@@ -126,12 +152,12 @@ func NewPostgresContainer(
 
 	port, err := container.MappedPort(ctx, nat.Port(pgPort))
 	if err != nil {
-		return nil, err
+		return pgc, err
 	}
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		return nil, err
+		return pgc, err
 	}
 
 	pgc = &PgContainer{
@@ -146,7 +172,8 @@ func NewPostgresContainer(
 
 func NewContainerTables(
 	t *testing.T,
-	version, script string,
+	version string,
+	scripts []string,
 	tables []string,
 	options ...TableOption,
 ) (pgc *PgContainer, err error) {
@@ -163,6 +190,7 @@ func NewContainerTables(
 		filesystem = os.DirFS("./")
 	}
 
+	pgc = &PgContainer{}
 	pgc, err = NewPostgresContainer(t, version)
 	defer func() {
 		if err != nil && pgc != nil {
@@ -170,26 +198,33 @@ func NewContainerTables(
 		}
 	}()
 	if err != nil {
-		return nil, err
+		return pgc, err
 	}
 
 	ctx := context.Background()
 	conn, err := pgxpool.New(ctx, pgc.Endpoint())
 	if err != nil {
-		return nil, err
+		return pgc, err
 	}
 	defer func() {
 		conn.Close()
 	}()
 
-	b, err = fs.ReadFile(filesystem, script)
-	if err != nil {
-		return nil, err
+	scriptsInitFunc := func() (err error) {
+		for _, script := range scripts {
+			b, err = fs.ReadFile(filesystem, script)
+			if err != nil {
+				return err
+			}
+			if _, err = conn.Exec(ctx, string(b)); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
-	_, err = conn.Exec(ctx, string(b))
-	if err != nil {
-		return nil, err
+	if err = scriptsInitFunc(); err != nil {
+		return pgc, err
 	}
 
 	for _, table := range tables {
@@ -199,7 +234,7 @@ func NewContainerTables(
 		err = conn.QueryRow(ctx, tableExistsQuery).Scan(&dummy)
 		if err != nil || dummy != 0 {
 			tctr.CleanupContainer(t, pgc.Container)
-			return nil, err
+			return pgc, err
 		}
 	}
 
@@ -210,8 +245,8 @@ func NewContainerTableUsers(t *testing.T, version string) (*PgContainer, error) 
 	return NewContainerTables(
 		t,
 		version,
-		"schema/users.sql",
-		[]string{"Users"},
+		userScripts,
+		userTables,
 		TableOption{
 			FS: &schema,
 		},
@@ -222,8 +257,8 @@ func NewContainerTableEvents(t *testing.T, version string) (*PgContainer, error)
 	return NewContainerTables(
 		t,
 		version,
-		"schema/events.sql",
-		[]string{"Events"},
+		eventScripts,
+		eventTables,
 		TableOption{
 			FS: &schema,
 		},
@@ -234,8 +269,8 @@ func NewContainerTableEventLogs(t *testing.T, version string) (*PgContainer, err
 	return NewContainerTables(
 		t,
 		version,
-		"schema/event_logs.sql",
-		[]string{"EventLogs"},
+		eventLogScripts,
+		eventLogTables,
 		TableOption{
 			FS: &schema,
 		},
@@ -246,8 +281,8 @@ func NewContainerTablesTx(t *testing.T, version string) (*PgContainer, error) {
 	return NewContainerTables(
 		t,
 		version,
-		"schema/tx.sql",
-		[]string{"TxSenderClocks", "TxReceiverClocks", "TxExecutor", "TxResult"},
+		txScripts,
+		txTables,
 		TableOption{
 			FS: &schema,
 		},

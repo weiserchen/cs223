@@ -24,7 +24,7 @@ func HandleGetUser(cfg *router.Config) http.Handler {
 		var user *database.User
 		var err error
 
-		req := middleware.MarshalRequest[RequestGetUser](r)
+		req := middleware.UnmarshalRequest[RequestGetUser](r)
 		user, err = cfg.DB.UserStore.GetUser(r.Context(), req.UserID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetUser, err), http.StatusInternalServerError)
@@ -53,7 +53,7 @@ func HandleGetUserID(cfg *router.Config) http.Handler {
 		var userID int64
 		var err error
 
-		req := middleware.MarshalRequest[RequestGetUserID](r)
+		req := middleware.UnmarshalRequest[RequestGetUserID](r)
 		userID, err = cfg.DB.UserStore.GetID(r.Context(), req.UserName)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetUserID, err), http.StatusInternalServerError)
@@ -80,7 +80,7 @@ func HandleGetUserName(cfg *router.Config) http.Handler {
 		var userName string
 		var err error
 
-		req := middleware.MarshalRequest[RequestGetUserName](r)
+		req := middleware.UnmarshalRequest[RequestGetUserName](r)
 		userName, err = cfg.DB.UserStore.GetName(r.Context(), req.UserID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetUserName, err), http.StatusInternalServerError)
@@ -107,7 +107,7 @@ func HandleGetUserHostEvents(cfg *router.Config) http.Handler {
 		var hostEvents []int64
 		var err error
 
-		req := middleware.MarshalRequest[RequestGetUserHostEvents](r)
+		req := middleware.UnmarshalRequest[RequestGetUserHostEvents](r)
 		hostEvents, err = cfg.DB.UserStore.GetHostEvents(r.Context(), req.UserID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetUserHostEvents, err), http.StatusInternalServerError)
@@ -135,7 +135,7 @@ func HandleCreateUser(cfg *router.Config) http.Handler {
 		var userID int64
 		var err error
 
-		req := middleware.MarshalRequest[RequestCreateUser](r)
+		req := middleware.UnmarshalRequest[RequestCreateUser](r)
 		userID, err = database.UnwrapResult(
 			r.Context(),
 			func(ctx context.Context) (int64, error) {
@@ -165,7 +165,7 @@ func HandleDeleteUser(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalRequest[RequestDeleteUser](r)
+		req := middleware.UnmarshalRequest[RequestDeleteUser](r)
 		_, err = database.UnwrapResult(
 			r.Context(),
 			func(ctx context.Context) (any, error) {
@@ -194,7 +194,7 @@ func HandleUpdateUserName(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalRequest[RequestUpdateUserName](r)
+		req := middleware.UnmarshalRequest[RequestUpdateUserName](r)
 		_, err = database.UnwrapResult(
 			r.Context(),
 			func(ctx context.Context) (any, error) {
@@ -223,7 +223,7 @@ func HandleAddUserHostEvent(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalRequest[RequestAddUserHostEvent](r)
+		req := middleware.UnmarshalRequest[RequestAddUserHostEvent](r)
 		_, err = database.UnwrapResult(
 			r.Context(),
 			func(ctx context.Context) (any, error) {
@@ -252,7 +252,7 @@ func HandleRemoveUserHostEvent(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalRequest[RequestRemoveUserHostEvent](r)
+		req := middleware.UnmarshalRequest[RequestRemoveUserHostEvent](r)
 		_, err = database.UnwrapResult(
 			r.Context(),
 			func(ctx context.Context) (any, error) {

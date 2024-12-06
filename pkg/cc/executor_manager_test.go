@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 	"txchain/pkg/database"
+	"txchain/pkg/format"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -100,6 +101,9 @@ func testSuccessExecFunc(
 	_, err = executor.Run()
 	require.NoError(t, err)
 
+	err = executor.Checkpoint()
+	require.NoError(t, err)
+
 	execMgr.Send(executor)
 }
 
@@ -127,6 +131,7 @@ func testCommitFailureExecFunc(
 	require.Error(t, err)
 
 	executor.execCtx.Status = ExecStatusAborted
+
 	err = executor.Checkpoint()
 	require.NoError(t, err)
 }
@@ -153,6 +158,9 @@ func testForceCompleteExecFunc(
 		Stage(stage3)
 
 	_, err = executor.Run()
+	require.NoError(t, err)
+
+	err = executor.Checkpoint()
 	require.NoError(t, err)
 
 	execMgr.Send(executor)
@@ -182,6 +190,9 @@ func testFlakySuccessfulExecFunc(
 	_, err = executor.Run()
 	require.NoError(t, err)
 
+	err = executor.Checkpoint()
+	require.NoError(t, err)
+
 	execMgr.Send(executor)
 }
 
@@ -209,6 +220,9 @@ func testFlakyForceCompleteExecFunc(
 	_, err = executor.Run()
 	require.NoError(t, err)
 
+	err = executor.Checkpoint()
+	require.NoError(t, err)
+
 	execMgr.Send(executor)
 }
 
@@ -217,7 +231,7 @@ func testSumEqual(t *testing.T, execCtxs []*TxExecutorContext, expectedSum int) 
 
 	sum := 0
 	for _, execCtx := range execCtxs {
-		input, err := UnmarshalInput[Input](execCtx.Input)
+		input, err := format.UnmarshalInput[Input](execCtx.Input)
 		require.NoError(t, err)
 		for _, n := range input.Value {
 			sum += n
@@ -245,7 +259,7 @@ func testAllExecutor(
 			return false
 		}
 		return true
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 10*time.Second, 500*time.Millisecond, len(execCtxs))
 
 	return execCtxs
 }

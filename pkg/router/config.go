@@ -8,6 +8,7 @@ import (
 	"log"
 	"txchain/pkg/cc"
 	"txchain/pkg/database"
+	"txchain/pkg/middleware"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -46,6 +47,7 @@ type Config struct {
 	DB     *database.DB
 	Peers  map[string]string
 	TxMgr  *cc.TxManager
+	Logger middleware.Logger
 }
 
 func NewConfig(

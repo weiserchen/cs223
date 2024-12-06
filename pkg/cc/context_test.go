@@ -3,6 +3,7 @@ package cc
 import (
 	"net/http"
 	"testing"
+	"txchain/pkg/format"
 
 	"github.com/stretchr/testify/require"
 )
@@ -95,9 +96,9 @@ func checkTxCtrlCtx(t *testing.T, expected, got *TxControlContext) {
 func checkTypeEqual[T any](t *testing.T, expected, got any) {
 	t.Helper()
 
-	expectedValue, err := UnmarshalInput[T](expected)
+	expectedValue, err := format.UnmarshalInput[T](expected)
 	require.NoError(t, err)
-	gotValue, err := UnmarshalInput[T](got)
+	gotValue, err := format.UnmarshalInput[T](got)
 	require.NoError(t, err)
 	require.EqualValues(t, expectedValue, gotValue)
 }

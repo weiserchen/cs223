@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"github.com/gorilla/schema"
+	"github.com/mitchellh/mapstructure"
 )
 
 var (
@@ -50,4 +51,10 @@ func EncodeParam[T any](v T) (url.Values, error) {
 		return nil, err
 	}
 	return values, nil
+}
+
+func UnmarshalInput[T any](v any) (T, error) {
+	var input T
+	err := mapstructure.Decode(v, &input)
+	return input, err
 }

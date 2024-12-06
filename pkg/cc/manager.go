@@ -15,6 +15,7 @@ type TxManager struct {
 	OriginMgr        *TxOriginManager
 	ExecMgr          *TxExecutorManager
 	RecoveryMgr      *TxRecoveryManager
+	Instrumenter     *TxInstrumenter
 	conn             *pgxpool.Pool
 }
 
@@ -31,6 +32,7 @@ func NewTxManager(conn *pgxpool.Pool, partitions uint64, services []string) *TxM
 		filterMgr.Init(service)
 		originMgr.Init(service)
 	}
+	instrumenter := NewTxInstrumenter()
 	return &TxManager{
 		SenderClockMgr:   senderClockMgr,
 		ReceiverClockMgr: receiverClockMgr,
@@ -40,11 +42,7 @@ func NewTxManager(conn *pgxpool.Pool, partitions uint64, services []string) *TxM
 		OriginMgr:        originMgr,
 		ExecMgr:          execMgr,
 		RecoveryMgr:      recoveryMgr,
+		Instrumenter:     instrumenter,
 		conn:             conn,
 	}
-}
-
-func (mgr *TxManager) Run() error {
-	err := mgr.RecoveryMgr.Recover()
-	return err
 }

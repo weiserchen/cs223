@@ -45,6 +45,7 @@ func UnwrapResult[R any](
 	if err == nil {
 		return r, nil
 	}
+	panic(err)
 
 	if !errors.Is(err, ErrTxAlreadyExecuted) {
 		return r, err
@@ -85,34 +86,6 @@ func UnmarshalResult[R any](traceCtx *format.TraceContext) (R, bool) {
 	}
 	return result.Value, true
 }
-
-// func FetchAndDecodeTxResult[R any](
-// 	conn *pgxpool.Pool,
-// 	partition uint64,
-// 	service string,
-// 	timestamp uint64,
-// ) (R, error) {
-// 	query := `
-// 		SELECT content
-// 		FROM TxResult
-// 		WHERE prt = $1 AND svc = $2 AND ts = $3;
-// 	`
-
-// 	var b []byte
-// 	var r R
-// 	var result Result[R]
-// 	var ok bool
-// 	row := conn.QueryRow(context.Background(), query, partition, service, timestamp)
-// 	if err := row.Scan(&b); err != nil {
-// 		return r, err
-// 	}
-
-// 	if err := json.Unmarshal(b, &result); err != nil {
-// 		return r, nil
-// 	}
-
-// 	return r, nil
-// }
 
 type TxLifeCycle[API comparable, R any] struct {
 	table *TxTable[API]

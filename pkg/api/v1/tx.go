@@ -32,7 +32,7 @@ func HandleTxCreateEvent(cfg *router.Config) http.Handler {
 			Timeout: DefaultTimeout,
 		}
 
-		req := middleware.MarshalRequest[RequestTxCreateEvent](r)
+		req := middleware.UnmarshalRequest[RequestTxCreateEvent](r)
 		serviceUser := cfg.Peers[router.ServiceUser]
 		serviceEvent := cfg.Peers[router.ServiceEvent]
 		serviceEventLog := cfg.Peers[router.ServiceEventLog]
@@ -111,7 +111,7 @@ func HandleTxUpdateEvent(cfg *router.Config) http.Handler {
 			Timeout: DefaultTimeout,
 		}
 
-		req := middleware.MarshalRequest[RequestTxUpdateEvent](r)
+		req := middleware.UnmarshalRequest[RequestTxUpdateEvent](r)
 		serviceEvent := cfg.Peers[router.ServiceEvent]
 		serviceEventLog := cfg.Peers[router.ServiceEventLog]
 
@@ -166,7 +166,7 @@ func HandleTxDeleteEvent(cfg *router.Config) http.Handler {
 			Timeout: DefaultTimeout,
 		}
 
-		req := middleware.MarshalRequest[RequestTxDeleteEvent](r)
+		req := middleware.UnmarshalRequest[RequestTxDeleteEvent](r)
 		serviceUser := cfg.Peers[router.ServiceUser]
 		serviceEvent := cfg.Peers[router.ServiceEvent]
 		serviceEventLog := cfg.Peers[router.ServiceEventLog]
@@ -234,7 +234,7 @@ func HandleTxJoinEvent(cfg *router.Config) http.Handler {
 			Timeout: DefaultTimeout,
 		}
 
-		req := middleware.MarshalRequest[RequestTxJoinEvent](r)
+		req := middleware.UnmarshalRequest[RequestTxJoinEvent](r)
 		serviceEvent := cfg.Peers[router.ServiceEvent]
 		serviceEventLog := cfg.Peers[router.ServiceEventLog]
 
@@ -282,7 +282,7 @@ func HandleTxLeaveEvent(cfg *router.Config) http.Handler {
 			Timeout: DefaultTimeout,
 		}
 
-		req := middleware.MarshalRequest[RequestTxLeaveEvent](r)
+		req := middleware.UnmarshalRequest[RequestTxLeaveEvent](r)
 		serviceEvent := cfg.Peers[router.ServiceEvent]
 		serviceEventLog := cfg.Peers[router.ServiceEventLog]
 

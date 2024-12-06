@@ -20,7 +20,7 @@ import (
 
 func EchoHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := middleware.MarshalID(r)
+		id := middleware.UnmarshalID(r)
 		format.WriteResponseStr(w, id, http.StatusOK)
 	})
 }

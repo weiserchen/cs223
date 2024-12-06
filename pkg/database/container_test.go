@@ -2,9 +2,6 @@ package database
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,100 +51,33 @@ func TestPostgresContainer(t *testing.T) {
 	require.True(t, dummy)
 
 }
-
-func TestLocalSchemaCreation(t *testing.T) {
-	t.Parallel()
-
-	var err error
-	var pgc *PgContainer
-
-	testcases := []struct {
-		name   string
-		table  string
-		script string
-	}{
-		{
-			name:   "Users Table",
-			table:  "Users",
-			script: "./schema/users.sql",
-		},
-		{
-			name:   "Events Table",
-			table:  "Events",
-			script: "./schema/events.sql",
-		},
-		{
-			name:   "EventLogs Table",
-			table:  "EventLogs",
-			script: "./schema/event_logs.sql",
-		},
-	}
-
-	pgc, err = NewPostgresContainer(t, "17.1")
-	defer tctr.CleanupContainer(t, pgc.Container)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	conn, err := pgxpool.New(ctx, pgc.Endpoint())
-	require.NoError(t, err)
-
-	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			var scriptPath string
-			var err error
-			var dummy int
-			var b []byte
-
-			scriptPath, err = filepath.Abs(tc.script)
-			require.NoError(t, err)
-
-			b, err = os.ReadFile(scriptPath)
-			require.NoError(t, err)
-
-			_, err = conn.Exec(ctx, string(b))
-			require.NoError(t, err)
-
-			tableExistsQuery := fmt.Sprintf(
-				`SELECT COUNT(*) FROM %s;`,
-				tc.table,
-			)
-
-			err = conn.QueryRow(ctx, tableExistsQuery).Scan(&dummy)
-			require.NoError(t, err)
-			require.Zero(t, dummy)
-		})
-	}
-}
-
 func TestDistributedSchemaCreation(t *testing.T) {
 	t.Parallel()
 
 	testcases := []struct {
-		name   string
-		script string
-		tables []string
+		name    string
+		scripts []string
+		tables  []string
 	}{
 		{
-			name:   "Users Table",
-			script: "schema/users.sql",
-			tables: []string{"Users"},
+			name:    "Users Table",
+			scripts: userScripts,
+			tables:  userTables,
 		},
 		{
-			name:   "Events Table",
-			script: "schema/events.sql",
-			tables: []string{"Events"},
+			name:    "Events Table",
+			scripts: eventScripts,
+			tables:  eventTables,
 		},
 		{
-			name:   "EventLogs Table",
-			script: "schema/event_logs.sql",
-			tables: []string{"EventLogs"},
+			name:    "EventLogs Table",
+			scripts: eventLogScripts,
+			tables:  eventLogTables,
 		},
 		{
-			name:   "Tx Tables",
-			script: "schema/tx.sql",
-			tables: []string{"TxSenderClocks", "TxReceiverClocks", "TxExecutor", "TxResult"},
+			name:    "Tx Tables",
+			scripts: txScripts,
+			tables:  txTables,
 		},
 	}
 
@@ -158,7 +88,7 @@ func TestDistributedSchemaCreation(t *testing.T) {
 			var err error
 			var pgc *PgContainer
 
-			pgc, err = NewContainerTables(t, "17.1", tc.script, tc.tables)
+			pgc, err = NewContainerTables(t, "17.1", tc.scripts, tc.tables)
 			defer func() {
 				if pgc != nil {
 					tctr.CleanupContainer(t, pgc.Container)

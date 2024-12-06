@@ -5,8 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-
-	"github.com/mitchellh/mapstructure"
 )
 
 var (
@@ -50,12 +48,6 @@ func SetTxExecCtx(ctx context.Context, execCtx *TxExecutorContext) context.Conte
 	return context.WithValue(ctx, contextKeyTxExecCtx, execCtx)
 }
 
-func UnmarshalInput[T any](v any) (T, error) {
-	var input T
-	err := mapstructure.Decode(v, &input)
-	return input, err
-}
-
 type TxStageContext struct {
 	Partition uint64   `json:"partition"`
 	Service   string   `json:"service"`
@@ -88,6 +80,7 @@ type TxControlContext struct {
 	Service   string   `json:"service"`
 	Attrs     []string `json:"attrs"`
 	DryRun    bool     `json:"dry_run"`
+	LoggerID  string   `json:"logger_id"`
 }
 
 func DecodeTxControlContext(encoded string) (*TxControlContext, error) {
@@ -131,6 +124,7 @@ type TxExecutorContext struct {
 	Curr       int
 	Method     string
 	Endpoint   string
+	Recovered  bool
 }
 
 func DecodeTxExecutorContext(encoded string) (*TxExecutorContext, error) {

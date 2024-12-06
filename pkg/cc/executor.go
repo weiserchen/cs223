@@ -3,6 +3,7 @@ package cc
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"time"
 )
@@ -104,6 +105,7 @@ func (mgr *TxExecutorManager) Run() {
 
 				exec.execCtx.Status = ExecStatusCompleted
 				if err := exec.Checkpoint(); err != nil {
+					log.Println("checkpoint completed:", exec.execCtx.ExecID)
 					mgr.retry(exec)
 				}
 			}()
@@ -201,9 +203,8 @@ func (exec *TxExecutor) Run() (any, error) {
 	switch exec.execCtx.Status {
 	case ExecStatusAborted:
 		return nil, ErrTxExecAborted
-	case ExecStatusForceComplete:
-		return nil, ErrTxExecUnrecoverable
-	case ExecStatusCommitted | ExecStatusCompleted:
+	// ExecStatusForceComplete implies committed
+	case ExecStatusCommitted, ExecStatusForceComplete, ExecStatusCompleted:
 		return exec.execCtx.Result, nil
 	default:
 		input := exec.execCtx.Input
@@ -220,6 +221,21 @@ func (exec *TxExecutor) Run() (any, error) {
 
 		return commitStage.result, nil
 	}
+}
+
+func (exec *TxExecutor) SyncRun() (any, error) {
+	result, err := exec.Run()
+	if err != nil {
+		return nil, err
+	}
+
+	for exec.Next() {
+		if err = exec.Execute(); err != nil {
+			return result, err
+		}
+	}
+
+	return result, nil
 }
 
 type TxExecutorStage struct {

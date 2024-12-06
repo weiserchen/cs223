@@ -2,14 +2,14 @@ package cc
 
 type TxClockManager struct {
 	partitions uint64
-	clocks     map[uint64]map[string]uint64
+	clocks     []map[string]uint64
 }
 
 func NewTxClockManager(partitions uint64) *TxClockManager {
 	partitions = GenPartitions(partitions)
-	clocks := make(map[uint64]map[string]uint64)
+	clocks := make([]map[string]uint64, partitions)
 	for partition := range partitions {
-		clocks[partition] = make(map[string]uint64)
+		clocks[partition] = map[string]uint64{}
 	}
 	return &TxClockManager{
 		partitions: GenPartitions(partitions),

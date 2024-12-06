@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 	"txchain/pkg/database"
+	"txchain/pkg/format"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -346,6 +347,39 @@ func flakyCompleteFunc(v any) (any, error) {
 	return s, nil
 }
 
+func recoveryPushStageFunc(i int) StageFunc {
+	return func(v any) (any, any, error) {
+		var s Input
+		var ok bool
+		var err error
+		s, ok = v.(Input)
+		if !ok {
+			s, err = format.UnmarshalInput[Input](v)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		s.Value = append(s.Value, i)
+		r := Result{i}
+		return r, s, nil
+	}
+}
+
+func recoveryForceCompleteFunc(v any) (any, error) {
+	var s Input
+	var ok bool
+	var err error
+	s, ok = v.(Input)
+	if !ok {
+		s, err = format.UnmarshalInput[Input](v)
+		if err != nil {
+			return nil, err
+		}
+	}
+	s.Value = append(s.Value, 0)
+	return s, nil
+}
+
 func defaultExecCtx() *TxExecutorContext {
 	ctrlCtx := &TxControlContext{
 		Partition: 3,
@@ -375,6 +409,9 @@ const (
 	execStage2Flaky
 	execStage3Flaky
 	execStageFailureFlaky
+	execStage1Recovery
+	execStage2Recovery
+	execStage3Recovery
 )
 
 func defaultStages() map[execStage]*TxExecutorStage {
@@ -434,6 +471,21 @@ func defaultStages() map[execStage]*TxExecutorStage {
 		RollbackStage(popRollbackFunc).
 		CompleteStage(flakyCompleteFunc)
 
+	recoveryStage1 := NewExecutorStage()
+	recoveryStage1.
+		Stage(recoveryPushStageFunc(1)).
+		CompleteStage(recoveryForceCompleteFunc)
+
+	recoveryStage2 := NewExecutorStage()
+	recoveryStage2.
+		Stage(recoveryPushStageFunc(2)).
+		CompleteStage(recoveryForceCompleteFunc)
+
+	recoveryStage3 := NewExecutorStage()
+	recoveryStage3.
+		Stage(recoveryPushStageFunc(3)).
+		CompleteStage(recoveryForceCompleteFunc)
+
 	stages[execStage1] = stage1
 	stages[execStage2] = stage2
 	stages[execStage3] = stage3
@@ -443,6 +495,9 @@ func defaultStages() map[execStage]*TxExecutorStage {
 	stages[execStage2Flaky] = flakyStage2
 	stages[execStage3Flaky] = flakyStage3
 	stages[execStageFailureFlaky] = flakyFailureStage
+	stages[execStage1Recovery] = recoveryStage1
+	stages[execStage2Recovery] = recoveryStage2
+	stages[execStage3Recovery] = recoveryStage3
 
 	return stages
 }

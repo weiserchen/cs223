@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"txchain/pkg/cc"
+	"txchain/pkg/database"
 	"txchain/pkg/format"
 
 	"github.com/jackc/pgx/v5"
@@ -19,150 +20,53 @@ var (
 	ErrMiddlewareTxMiddsingCtrlCtx = errors.New("missing control context")
 )
 
-func TxTraceContext(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		traceCtx := format.NewTraceContext()
-		ctx := format.SetTraceContext(r.Context(), traceCtx)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func TxStageContext(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		encoded := r.Header.Get(headerTxStageContext)
-		// No tx context
-		if encoded == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		stageCtx, err := cc.DecodeTxStageContext(encoded)
-		if err != nil {
-			format.WriteJsonResponse(w, format.NewErrorResponse(cc.ErrTxStageContextDecode, err), http.StatusBadRequest)
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), contextKeyTxStageContext, stageCtx)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func TxControlContext(service string) Middlerware {
+func TxParticipant(mgr *cc.TxManager, logger Logger, participant string) Middlerware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			encoded := r.Header.Get(headerTxControlContext)
-			// No tx context
+			if logger == nil {
+				logger = &NopLogger{}
+			}
+
+			loggerID := r.Header.Get(headerTxLoggerID)
+			if loggerID == "" {
+				loggerID = DefaultLoggerID
+			}
+
+			session := logger.Session(loggerID)
+			defer session.Done()
+
+			traceCtx := format.NewTraceContext()
+			ctx := format.SetTraceContext(r.Context(), traceCtx)
+
+			session.Log("Participant: %s", participant)
+			encoded := r.Header.Get(headerTxStageContext)
+			// No tx stage context
 			if encoded == "" {
-				next.ServeHTTP(w, r)
+				session.Log("No Stage Ctx")
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			ctrlCtx, err := cc.DecodeTxControlContext(encoded)
+			stageCtx, err := cc.DecodeTxStageContext(encoded)
 			if err != nil {
-				format.WriteJsonResponse(w, format.NewErrorResponse(cc.ErrTxControlContextDecode, err), http.StatusBadRequest)
-				return
-			}
-			ctrlCtx.Service = service
-
-			ctx := context.WithValue(r.Context(), contextKeyTxControlContext, ctrlCtx)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
-func TxExecutorContext(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		encoded := r.Header.Get(headerTxExecutorContext)
-		// No tx context
-		if encoded == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		execCtx, err := cc.DecodeTxExecutorContext(encoded)
-		if err != nil {
-			format.WriteJsonResponse(w, format.NewErrorResponse(cc.ErrTxExecutorContextDecode, err), http.StatusBadRequest)
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), contextKeyTxExecutorContext, execCtx)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func TxPartition[T cc.Partition](mgr *cc.TxPartitionManager) Middlerware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctrlCtx, ok := MarshalTxControlContext(r)
-			// No tx control
-			if !ok {
-				next.ServeHTTP(w, r)
+				format.WriteJsonResponse(w, format.NewErrorResponse(cc.ErrTxStageContextDecode, err), http.StatusBadRequest)
 				return
 			}
 
-			req := MarshalRequest[T](r)
-			keys := req.Keys()
+			ctx = cc.SetTxStageCtx(ctx, stageCtx)
 
-			partition := mgr.Partition(keys...)
-			ctrlCtx.Partition = partition
-			mgr.Lock(partition)
-			defer mgr.Unlock(partition)
-
-			ctx := context.WithValue(r.Context(), contextKeyTxControlContext, ctrlCtx)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
-type ResponseWrapper struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func NewResponseWrapper(w http.ResponseWriter) *ResponseWrapper {
-	return &ResponseWrapper{}
-}
-
-func (rw *ResponseWrapper) WriteHeader(statusCode int) {
-	rw.statusCode = statusCode
-	rw.ResponseWriter.WriteHeader(statusCode)
-}
-
-func TxOriginOrdering(mgr *cc.TxOriginManager) Middlerware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			stageCtx, ok := MarshalTxStageContext(r)
-			if !ok {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			partition, service, timestamp := stageCtx.Partition, stageCtx.Service, stageCtx.Timestamp
-			mgr.Acquire(cc.NewWaitMsg(partition, service, timestamp))
-
-			// TODO: handle request errors
-			next.ServeHTTP(w, r)
-
-			mgr.Release(partition, service)
-		})
-	}
-}
-
-func TxFilter(mgr *cc.TxFilterManager) Middlerware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			stageCtx, ok := MarshalTxStageContext(r)
-			if !ok {
-				next.ServeHTTP(w, r)
-				return
-			}
-
+			session.Log("Stage Ctx: %v", stageCtx)
 			partition := stageCtx.Partition
 			service := stageCtx.Service
+			timestamp := stageCtx.Timestamp
 			attrs := stageCtx.Attrs
-			dropReq := mgr.DropReq(partition, service, attrs)
-			dropResp := mgr.DropResp(partition, service, attrs)
+			filterMgr := mgr.FilterMgr
+			dropReq := filterMgr.DropReq(partition, service, attrs)
+			dropResp := filterMgr.DropResp(partition, service, attrs)
+
+			session.Log("Drop Filter: req(%v) resp(%v)", dropReq, dropResp)
 			if dropReq {
+				session.Log("Drop Request")
 				format.WriteJsonResponse(w, format.NewErrorResponse(cc.ErrTxRequestDropped, nil), http.StatusServiceUnavailable)
 				return
 			}
@@ -171,7 +75,19 @@ func TxFilter(mgr *cc.TxFilterManager) Middlerware {
 			if dropResp {
 				writer = httptest.NewRecorder()
 			}
-			next.ServeHTTP(writer, r)
+
+			session.Log("Lock Partition: %d", partition)
+			originMgr := mgr.OriginMgr
+			originMgr.Acquire(cc.NewWaitMsg(partition, service, timestamp))
+			session.Log("Origin TS: %d", timestamp)
+			defer originMgr.Release(partition, service)
+
+			recorder := mgr.Instrumenter
+
+			recorder.VisitBefore(ctx)
+			next.ServeHTTP(writer, r.WithContext(ctx))
+			session.Log("Call Visit After")
+			recorder.VisitAfter(ctx)
 
 			if dropResp {
 				format.WriteJsonResponse(w, format.NewErrorResponse(cc.ErrTxResponseDropped, nil), http.StatusServiceUnavailable)
@@ -181,126 +97,198 @@ func TxFilter(mgr *cc.TxFilterManager) Middlerware {
 	}
 }
 
-func TxExecutor[T cc.Partition](
+func TxCoordinator[T cc.Partition](
 	conn *pgxpool.Pool,
-	mgr *cc.TxClockManager,
+	mgr *cc.TxManager,
+	logger Logger,
+	service string,
 	receivers []string,
 ) Middlerware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if logger == nil {
+				logger = &NopLogger{}
+			}
+
+			loggerID := r.Header.Get(headerTxLoggerID)
+			if loggerID == "" {
+				loggerID = DefaultLoggerID
+			}
+
+			session := logger.Session(loggerID)
+			defer session.Done()
+
+			session.Log("Coordinator:")
+
 			var execCtx *cc.TxExecutorContext
 			var ctrlCtx *cc.TxControlContext
-			var ok bool
 			var err error
-			var tx pgx.Tx
+			var ctx context.Context
 
-			_, ok = MarshalTxExecutorContext(r)
-			if ok {
-				next.ServeHTTP(w, r)
-				return
-			}
-			execCtx = &cc.TxExecutorContext{}
-			execCtx.Status = cc.ExecStatusPending
+			prtMgr := mgr.SenderPrtMgr
+			clockMgr := mgr.SenderClockMgr
+			ctx = r.Context()
 
-			ctrlCtx, ok = MarshalTxControlContext(r)
-			if !ok {
-				format.WriteJsonResponse(w, format.NewErrorResponse(ErrMiddlewareTxMiddsingCtrlCtx, err), http.StatusInternalServerError)
-				return
-			}
-			execCtx.CtrlCtx = ctrlCtx
-
-			partition := ctrlCtx.Partition
-			// Increment timestamps from sender sides
-			tsMap := map[string]uint64{}
-			timestamps := []uint64{}
-			for _, receiver := range receivers {
-				if ts, ok := tsMap[receiver]; !ok {
-					ts := mgr.Get(partition, receiver)
-					timestamps = append(timestamps, ts)
-					tsMap[receiver] = ts
-				} else {
-					timestamps = append(timestamps, ts+1)
-					tsMap[receiver]++
+			encodedExecCtx := r.Header.Get(headerTxExecutorContext)
+			// Recovery request
+			if encodedExecCtx != "" {
+				session.Log("Recovery Request:")
+				execCtx, err = cc.DecodeTxExecutorContext(encodedExecCtx)
+				if err != nil {
+					format.WriteJsonResponse(w, format.NewErrorResponse(ErrMiddlewareTxExecutor, err), http.StatusBadRequest)
+					return
 				}
+				execCtx.Recovered = true
+				ctx = cc.SetTxExecCtx(ctx, execCtx)
 			}
-			execCtx.Receivers = receivers
-			execCtx.Timestamps = timestamps
 
-			b, err := json.Marshal(execCtx)
-			if err != nil {
-				format.WriteJsonResponse(w, format.NewErrorResponse(ErrMiddlewareTxExecutor, err), http.StatusInternalServerError)
+			if execCtx != nil {
+				partition := execCtx.CtrlCtx.Partition
+				prtMgr.Lock(partition)
+				defer prtMgr.Unlock(partition)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			ctx := r.Context()
-			tx, err = conn.Begin(ctx)
-			if err != nil {
-				format.WriteJsonResponse(w, format.NewErrorResponse(ErrMiddlewareTxExecutor, err), http.StatusInternalServerError)
-				return
-			}
-
-			insertQuery := `
-				INSERT INTO TxExecutor (checkpoint)
-				VALUES ($1)
-				RETURNING exec_id;
-			`
-
-			row := tx.QueryRow(ctx, insertQuery, "{}")
-			if err = row.Scan(&execCtx.ExecID); err != nil {
-				_ = tx.Rollback(ctx)
-				format.WriteJsonResponse(w, format.NewErrorResponse(ErrMiddlewareTxExecutor, err), http.StatusInternalServerError)
-				return
-			}
-
-			batch := &pgx.Batch{}
-			count := 0
-			updateQuery := `
-				UPDATE TxExecutor (checkpoint)
-				VALUES ($2);
-				WHERE exec_id = $1; 
-			`
-			batch.Queue(updateQuery, execCtx.ExecID, b)
-			count++
-
-			for service, ts := range tsMap {
-				newTs := ts + 1
-				// upsert
-				timestampQuery := `
-					INSERT INTO TxSenderClocks (prt, svc, ts)
-					VALUES ($1, $2, $3)
-					ON CONFLICT (prt, svc)
-					DO UPDATE SET
-						ts = $3
-				`
-				batch.Queue(timestampQuery, partition, service, newTs)
-				count++
-			}
-
-			results := tx.SendBatch(ctx, batch)
-			defer results.Close()
-
-			for range count {
-				if _, err = results.Exec(); err != nil {
-					_ = tx.Rollback(ctx)
-					format.WriteJsonResponse(w, format.NewErrorResponse(ErrMiddlewareTxExecutor, err), http.StatusInternalServerError)
+			// New request
+			encodedCtrlCtx := r.Header.Get(headerTxControlContext)
+			if encodedCtrlCtx == "" {
+				ctrlCtx = &cc.TxControlContext{}
+			} else {
+				ctrlCtx, err = cc.DecodeTxControlContext(encodedCtrlCtx)
+				if err != nil {
+					format.WriteJsonResponse(w, format.NewErrorResponse(cc.ErrTxControlContextDecode, err), http.StatusBadRequest)
 					return
 				}
 			}
+			ctrlCtx.LoggerID = loggerID
+			ctrlCtx.Service = service
+			req := UnmarshalRequest[T](r)
+			keys := req.Keys()
+			ctrlCtx.Partition = prtMgr.Partition(keys...)
 
-			if err = tx.Commit(ctx); err != nil {
-				_ = tx.Rollback(ctx)
+			execCtx = &cc.TxExecutorContext{}
+			execCtx.Status = cc.ExecStatusPending
+			execCtx.CtrlCtx = ctrlCtx
+			execCtx.Input = req
+
+			recorder := mgr.Instrumenter
+
+			ctx = cc.SetTxExecCtx(ctx, execCtx)
+
+			if err = createTxExecutor(
+				conn,
+				prtMgr,
+				clockMgr,
+				session,
+				execCtx,
+				receivers,
+			); err != nil {
 				format.WriteJsonResponse(w, format.NewErrorResponse(ErrMiddlewareTxExecutor, err), http.StatusInternalServerError)
 				return
 			}
 
-			// update sender clocks
-			for service, ts := range tsMap {
-				newTs := ts + 1
-				mgr.Set(partition, service, newTs)
-			}
-
-			ctx = context.WithValue(ctx, contextKeyTxExecutorContext, execCtx)
+			session.Log("Exec Ctx: %v", execCtx)
+			recorder.VisitBefore(ctx)
 			next.ServeHTTP(w, r.WithContext(ctx))
+			recorder.VisitAfter(ctx)
 		})
 	}
+}
+
+func createTxExecutor(
+	conn *pgxpool.Pool,
+	prtMgr *cc.TxPartitionManager,
+	clockMgr *cc.TxClockManager,
+	session LoggerSession,
+	execCtx *cc.TxExecutorContext,
+	receivers []string,
+) (err error) {
+	var b []byte
+
+	partition := execCtx.CtrlCtx.Partition
+	prtMgr.Lock(partition)
+	defer prtMgr.Unlock(partition)
+
+	tsMap := map[string]uint64{}
+	timestamps := []uint64{}
+	for _, receiver := range receivers {
+		if ts, ok := tsMap[receiver]; !ok {
+			ts := clockMgr.Get(partition, receiver)
+			timestamps = append(timestamps, ts+1)
+			tsMap[receiver] = ts + 1
+		} else {
+			timestamps = append(timestamps, ts+1)
+			tsMap[receiver]++
+		}
+	}
+	session.Log("ts-map: %v", tsMap)
+	execCtx.Receivers = receivers
+	execCtx.Timestamps = timestamps
+
+	b, err = json.Marshal(execCtx)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	tx, commit, err := database.BeginTx(ctx, conn)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err = commit(err)
+		session.Log("Tx executor err: %v", err)
+		if err == nil {
+			// update sender clocks
+			for service, newTs := range tsMap {
+				clockMgr.Set(partition, service, newTs)
+			}
+		}
+	}()
+
+	insertQuery := `
+		INSERT INTO TxExecutor (status, checkpoint)
+		VALUES (@status, @checkpoint)
+		RETURNING exec_id;
+	`
+	args := pgx.NamedArgs{
+		"status":     cc.ExecStatusPending,
+		"checkpoint": b,
+	}
+
+	row := tx.QueryRow(ctx, insertQuery, args)
+	if err = row.Scan(&execCtx.ExecID); err != nil {
+		return err
+	}
+
+	batch := &pgx.Batch{}
+	count := 0
+	// upsert
+	timestampQuery := `
+		INSERT INTO TxSenderClocks (prt, svc, ts)
+		VALUES (@partition, @service, @timestamp)
+		ON CONFLICT (prt, svc)
+		DO UPDATE SET
+			ts = @timestamp;
+	`
+	for service, newTs := range tsMap {
+		args = pgx.NamedArgs{
+			"partition": partition,
+			"service":   service,
+			"timestamp": newTs,
+		}
+		batch.Queue(timestampQuery, args)
+		count++
+	}
+
+	results := tx.SendBatch(ctx, batch)
+	defer results.Close()
+
+	for range count {
+		if _, err = results.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

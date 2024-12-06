@@ -63,7 +63,7 @@ func HandleGetEvent(cfg *router.Config) http.Handler {
 		var dbEvent *database.Event
 		var err error
 
-		req := middleware.MarshalRequest[RequestGetEvent](r)
+		req := middleware.UnmarshalRequest[RequestGetEvent](r)
 		dbEvent, err = cfg.DB.EventStore.GetEvent(r.Context(), req.EventID)
 		if err != nil {
 			format.WriteJsonResponse(w, format.NewErrorResponse(ErrGetEvent, err), http.StatusInternalServerError)
@@ -91,7 +91,7 @@ func HandleCreateEvent(cfg *router.Config) http.Handler {
 		var dbEvent *database.Event
 		var err error
 
-		req := middleware.MarshalRequest[RequestCreateEvent](r)
+		req := middleware.UnmarshalRequest[RequestCreateEvent](r)
 		dbEvent = APIEventToDatabaseEvent(req.Event)
 		eventID, err = database.UnwrapResult(
 			r.Context(),
@@ -123,7 +123,7 @@ func HandleUpdateEvent(cfg *router.Config) http.Handler {
 		var dbEvent *database.Event
 		var err error
 
-		req := middleware.MarshalRequest[RequestUpdateEvent](r)
+		req := middleware.UnmarshalRequest[RequestUpdateEvent](r)
 		dbEvent = APIEventToDatabaseEvent(req.Event)
 		_, err = database.UnwrapResult(
 			r.Context(),
@@ -152,7 +152,7 @@ func HandleDeleteEvent(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalRequest[RequestDeleteEvent](r)
+		req := middleware.UnmarshalRequest[RequestDeleteEvent](r)
 		_, err = database.UnwrapResult(
 			r.Context(),
 			func(ctx context.Context) (any, error) {
@@ -181,7 +181,7 @@ func HandleAddEventParticipant(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalRequest[RequestAddEventParticipant](r)
+		req := middleware.UnmarshalRequest[RequestAddEventParticipant](r)
 		_, err = database.UnwrapResult(
 			r.Context(),
 			func(ctx context.Context) (any, error) {
@@ -210,7 +210,7 @@ func HandleRemoveEventParticipant(cfg *router.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		req := middleware.MarshalRequest[RequestRemoveEventParticipant](r)
+		req := middleware.UnmarshalRequest[RequestRemoveEventParticipant](r)
 		_, err = database.UnwrapResult(
 			r.Context(),
 			func(ctx context.Context) (any, error) {

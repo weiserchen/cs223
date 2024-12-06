@@ -88,12 +88,18 @@ func (mgr *TxFilterManager) ClearRespFilter(partition uint64, service string) {
 }
 
 func (mgr *TxFilterManager) DropReq(partition uint64, service string, attrs []string) bool {
+	if len(attrs) == 0 {
+		return false
+	}
 	partition = partition % mgr.partitions
 	set := mgr.reqFilter[partition][service]
 	return set.Contains(attrs...)
 }
 
 func (mgr *TxFilterManager) DropResp(partition uint64, service string, attrs []string) bool {
+	if len(attrs) == 0 {
+		return false
+	}
 	partition = partition % mgr.partitions
 	set := mgr.respFilter[partition][service]
 	return set.Contains(attrs...)

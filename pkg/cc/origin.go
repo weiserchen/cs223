@@ -116,6 +116,7 @@ func (mgr *TxOriginManager) next(partition uint64, service string) {
 	var ok bool
 
 	q := mgr.queues[partition][service]
+	// log.Println("origin queue:", q.Values())
 	topMsg, ok = q.Peek()
 	if !ok {
 		return
