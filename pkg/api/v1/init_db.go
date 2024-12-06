@@ -157,7 +157,7 @@ func (pg *postgres) getEventsWithNoHost(ctx context.Context) ([]int64, error) {
 	return ids, nil
 }
 
-func (pg *postgres) getRandomUsers(ctx context.Context) ([]int64, error) {
+func (pg *postgres) getAllUsers(ctx context.Context) ([]int64, error) {
 	query := `SELECT ID FROM Users`
 	rows, err := pg.db.Query(ctx, query)
 	if err != nil {
@@ -175,7 +175,7 @@ func (pg *postgres) getRandomUsers(ctx context.Context) ([]int64, error) {
 	return ids, nil
 }
 
-func (pg *postgres) getRandomEvents(ctx context.Context) ([]int64, error) {
+func (pg *postgres) getAllEvents(ctx context.Context) ([]int64, error) {
 	query := `SELECT ID FROM Events`
 	rows, err := pg.db.Query(ctx, query)
 	if err != nil {
@@ -198,7 +198,7 @@ func (pg *postgres) makeHost(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Error: %w", err)
 	}
-	userIDs, err := pg.getRandomUsers(ctx)
+	userIDs, err := pg.getAllUsers(ctx)
 	if err != nil {
 		return fmt.Errorf("Error: %w", err)
 	}
@@ -247,11 +247,11 @@ func (pg *postgres) makeHost(ctx context.Context) error {
 }
 
 func (pg *postgres) makeParticipants(ctx context.Context) error {
-	eventIDs, err := pg.getRandomEvents(ctx)
+	eventIDs, err := pg.getAllEvents(ctx)
 	if err != nil {
 		return fmt.Errorf("Error: %w", err)
 	}
-	userIDs, err := pg.getRandomUsers(ctx)
+	userIDs, err := pg.getAllUsers(ctx)
 	if err != nil {
 		return fmt.Errorf("Error: %w", err)
 	}
